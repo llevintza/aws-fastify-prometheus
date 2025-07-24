@@ -2,9 +2,11 @@
  * Fastify Prometheus Metrics Plugin
  */
 
+import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
 import { register, collectDefaultMetrics, Counter, Gauge, Histogram, Summary } from 'prom-client';
-import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
+
+import { AwsMetricsExporter } from './aws-metrics-exporter';
 import type {
   FastifyPrometheusOptions,
   HttpRequestMetrics,
@@ -13,7 +15,6 @@ import type {
   HttpMetricsConfig,
   FastifyPrometheusContext,
 } from './types';
-import { AwsMetricsExporter } from './aws-metrics-exporter';
 
 /**
  * Default configuration for HTTP metrics
@@ -71,146 +72,157 @@ const DEFAULT_OPTIONS: Partial<FastifyPrometheusOptions> = {
 const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = async (
   fastify: FastifyInstance,
   options: FastifyPrometheusOptions
-) => {
+): Promise<void> => {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  const metricsRegistry = config.register || register;
-  
+  const metricsRegistry = config.register ?? register;
+
   // Store metrics instances
   const metrics = new Map<string, Counter | Gauge | Histogram | Summary>();
   let awsExporter: AwsMetricsExporter | undefined;
-  
+
   // Initialize AWS CloudWatch exporter if configured
   if (config.awsCloudWatch) {
     awsExporter = new AwsMetricsExporter(config.awsCloudWatch);
   }
-  
+
   // Set default labels
   if (config.defaultLabels && Object.keys(config.defaultLabels).length > 0) {
     metricsRegistry.setDefaultLabels(config.defaultLabels);
   }
-  
+
   // Enable default metrics collection
-  if (config.enableDefaultMetrics) {
+  if (config.enableDefaultMetrics === true) {
     collectDefaultMetrics({
       register: metricsRegistry,
       timeout: config.defaultMetricsInterval,
     });
   }
-  
+
   // Initialize HTTP metrics
-  initializeHttpMetrics(config.httpMetrics!, metrics, metricsRegistry);
-  
+  if (config.httpMetrics) {
+    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry);
+  }
+
   // Initialize custom metrics
-  if (config.customMetrics) {
+  if (config.customMetrics !== undefined) {
     initializeCustomMetrics(config.customMetrics, metrics, metricsRegistry);
   }
-  
+
   // Add metrics endpoint
-  if (config.endpoint) {
+  if (config.endpoint !== undefined && config.endpoint !== '') {
     fastify.get(config.endpoint, async (request, reply) => {
       reply.type('text/plain');
       return metricsRegistry.metrics();
     });
   }
-  
+
   // Add request tracking hooks
   fastify.addHook('onRequest', async (request: FastifyRequest) => {
     request.startTime = Date.now();
   });
-  
+
   fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     const route = request.routerPath || request.url;
-    
+
     // Skip excluded routes
     if (config.excludeRoutes?.some(excludedRoute => route.includes(excludedRoute))) {
       return;
     }
-    
+
     // Skip if only specific routes are included and this route is not included
-    if (config.includeRoutes && !config.includeRoutes.some(includedRoute => route.includes(includedRoute))) {
+    if (
+      config.includeRoutes !== undefined &&
+      config.includeRoutes.length > 0 &&
+      !config.includeRoutes.some(includedRoute => route.includes(includedRoute))
+    ) {
       return;
     }
-    
-    const duration = request.startTime ? Date.now() - request.startTime : 0;
+
+    const duration = request.startTime !== undefined ? Date.now() - request.startTime : 0;
     const labels = {
       method: request.method,
       route,
       status_code: reply.statusCode.toString(),
     };
-    
+
     // Record HTTP metrics
-    recordHttpMetrics({
-      method: request.method,
-      route,
-      statusCode: reply.statusCode,
-      duration,
-      responseSize: reply.getHeader('content-length') as number | undefined,
-      labels,
-    }, config.httpMetrics!, metrics, awsExporter);
+    recordHttpMetrics(
+      {
+        method: request.method,
+        route,
+        statusCode: reply.statusCode,
+        duration,
+        responseSize: reply.getHeader('content-length') as number | undefined,
+        labels,
+      },
+      config.httpMetrics!,
+      metrics,
+      awsExporter
+    );
   });
-  
+
   // Add plugin context methods
   const context: FastifyPrometheusContext = {
     async getMetrics(): Promise<string> {
       return metricsRegistry.metrics();
     },
-    
+
     clearMetrics(): void {
       metricsRegistry.clear();
     },
-    
+
     incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
       const metric = metrics.get(name) as Counter;
       if (metric) {
         metric.inc(labels, value);
-        
+
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
     },
-    
+
     setGauge(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Gauge;
       if (metric) {
         metric.set(labels, value);
-        
+
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
     },
-    
+
     observeHistogram(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Histogram;
       if (metric) {
         metric.observe(labels, value);
-        
+
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
     },
-    
+
     observeSummary(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Summary;
       if (metric) {
         metric.observe(labels, value);
-        
+
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
     },
-    
+
     recordHttpRequest(httpMetrics: HttpRequestMetrics): void {
       recordHttpMetrics(httpMetrics, config.httpMetrics!, metrics, awsExporter);
     },
   };
-  
+
   // Decorate fastify instance with metrics context
   fastify.decorate('prometheus', context);
-  
+
   // Cleanup on close
   fastify.addHook('onClose', async () => {
     if (awsExporter) {
@@ -238,7 +250,7 @@ function initializeHttpMetrics(
     });
     metrics.set(config.requestDuration.name!, metric);
   }
-  
+
   if (config.requestCount?.enabled) {
     const metric = new Counter({
       name: config.requestCount.name!,
@@ -248,7 +260,7 @@ function initializeHttpMetrics(
     });
     metrics.set(config.requestCount.name!, metric);
   }
-  
+
   if (config.responseSize?.enabled) {
     const metric = new Histogram({
       name: config.responseSize.name!,
@@ -259,7 +271,7 @@ function initializeHttpMetrics(
     });
     metrics.set(config.responseSize.name!, metric);
   }
-  
+
   if (config.errorCount?.enabled) {
     const metric = new Counter({
       name: config.errorCount.name!,
@@ -269,7 +281,7 @@ function initializeHttpMetrics(
     });
     metrics.set(config.errorCount.name!, metric);
   }
-  
+
   if (config.successCount?.enabled) {
     const metric = new Counter({
       name: config.successCount.name!,
@@ -291,7 +303,7 @@ function initializeCustomMetrics(
 ): void {
   for (const metricDef of customMetrics) {
     let metric: Counter | Gauge | Histogram | Summary;
-    
+
     switch (metricDef.type) {
       case 'counter':
         metric = new Counter({
@@ -301,7 +313,7 @@ function initializeCustomMetrics(
           registers: [registry],
         });
         break;
-        
+
       case 'gauge':
         metric = new Gauge({
           name: metricDef.name,
@@ -310,7 +322,7 @@ function initializeCustomMetrics(
           registers: [registry],
         });
         break;
-        
+
       case 'histogram':
         metric = new Histogram({
           name: metricDef.name,
@@ -320,7 +332,7 @@ function initializeCustomMetrics(
           registers: [registry],
         });
         break;
-        
+
       case 'summary':
         metric = new Summary({
           name: metricDef.name,
@@ -332,11 +344,11 @@ function initializeCustomMetrics(
           registers: [registry],
         });
         break;
-        
+
       default:
         continue;
     }
-    
+
     metrics.set(metricDef.name, metric);
   }
 }
@@ -352,7 +364,7 @@ function recordHttpMetrics(
 ): void {
   const isError = requestMetrics.statusCode >= 400;
   const isSuccess = requestMetrics.statusCode >= 200 && requestMetrics.statusCode < 400;
-  
+
   // Record request duration
   if (config.requestDuration?.enabled) {
     const metric = metrics.get(config.requestDuration.name!) as Histogram;
@@ -360,7 +372,7 @@ function recordHttpMetrics(
       metric.observe(requestMetrics.labels, requestMetrics.duration);
     }
   }
-  
+
   // Record request count
   if (config.requestCount?.enabled) {
     const metric = metrics.get(config.requestCount.name!) as Counter;
@@ -368,7 +380,7 @@ function recordHttpMetrics(
       metric.inc(requestMetrics.labels);
     }
   }
-  
+
   // Record response size
   if (config.responseSize?.enabled && requestMetrics.responseSize) {
     const metric = metrics.get(config.responseSize.name!) as Histogram;
@@ -376,7 +388,7 @@ function recordHttpMetrics(
       metric.observe(requestMetrics.labels, requestMetrics.responseSize);
     }
   }
-  
+
   // Record error count
   if (config.errorCount?.enabled && isError) {
     const metric = metrics.get(config.errorCount.name!) as Counter;
@@ -384,7 +396,7 @@ function recordHttpMetrics(
       metric.inc(requestMetrics.labels);
     }
   }
-  
+
   // Record success count
   if (config.successCount?.enabled && isSuccess) {
     const metric = metrics.get(config.successCount.name!) as Counter;
@@ -392,25 +404,33 @@ function recordHttpMetrics(
       metric.inc(requestMetrics.labels);
     }
   }
-  
+
   // Export to AWS CloudWatch
   if (awsExporter) {
     if (config.requestDuration?.enabled) {
-      awsExporter.exportMetric(config.requestDuration.name!, requestMetrics.duration, requestMetrics.labels);
+      awsExporter.exportMetric(
+        config.requestDuration.name!,
+        requestMetrics.duration,
+        requestMetrics.labels
+      );
     }
-    
+
     if (config.requestCount?.enabled) {
       awsExporter.exportMetric(config.requestCount.name!, 1, requestMetrics.labels);
     }
-    
+
     if (config.responseSize?.enabled && requestMetrics.responseSize) {
-      awsExporter.exportMetric(config.responseSize.name!, requestMetrics.responseSize, requestMetrics.labels);
+      awsExporter.exportMetric(
+        config.responseSize.name!,
+        requestMetrics.responseSize,
+        requestMetrics.labels
+      );
     }
-    
+
     if (config.errorCount?.enabled && isError) {
       awsExporter.exportMetric(config.errorCount.name!, 1, requestMetrics.labels);
     }
-    
+
     if (config.successCount?.enabled && isSuccess) {
       awsExporter.exportMetric(config.successCount.name!, 1, requestMetrics.labels);
     }
@@ -422,7 +442,7 @@ declare module 'fastify' {
   interface FastifyRequest {
     startTime?: number;
   }
-  
+
   interface FastifyInstance {
     prometheus: FastifyPrometheusContext;
   }

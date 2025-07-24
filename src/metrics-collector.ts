@@ -2,16 +2,16 @@
  * Metrics collector implementation
  */
 
+import type { Registry } from 'prom-client';
 import {
   Counter as PromCounter,
   Gauge as PromGauge,
   Histogram as PromHistogram,
   Summary as PromSummary,
-  Registry,
 } from 'prom-client';
 
-import type { MetricConfig, MetricLabels, CollectorOptions } from './types';
 import type { Counter, Gauge, Histogram, Summary } from './interfaces';
+import type { MetricConfig, MetricLabels, CollectorOptions } from './types';
 
 /**
  * MetricsCollector class for creating and managing metrics
@@ -135,7 +135,7 @@ export class MetricsCollector {
    */
   private buildMetricName(name: string): string {
     const prefix = this.options.labels.prefix as string | undefined;
-    return prefix ? `${prefix}_${name}` : name;
+    return prefix !== undefined && prefix !== '' ? `${prefix}_${name}` : name;
   }
 
   /**
@@ -157,7 +157,7 @@ export class MetricsCollector {
       return true;
     }
 
-    return this.options.filters.some(filter => {
+    return this.options.filters.some((filter: string) => {
       if (filter.startsWith('!')) {
         // Exclusion filter
         const pattern = filter.slice(1);

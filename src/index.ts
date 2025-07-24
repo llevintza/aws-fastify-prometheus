@@ -1,7 +1,7 @@
 /**
  * Fastify Prometheus Metrics Plugin
  * A comprehensive plugin for collecting and exporting Prometheus metrics in Fastify applications
- * 
+ *
  * @packageDocumentation
  */
 

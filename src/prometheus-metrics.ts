@@ -4,9 +4,9 @@
 
 import { register, collectDefaultMetrics, Registry } from 'prom-client';
 
-import type { PrometheusConfig, MetricConfig, MetricLabels } from './types';
 import type { Counter, Gauge, Histogram, Summary } from './interfaces';
 import { MetricsCollector } from './metrics-collector';
+import type { PrometheusConfig, MetricConfig, MetricLabels } from './types';
 
 /**
  * PrometheusMetrics class for managing Prometheus metrics collection
@@ -30,10 +30,10 @@ export class PrometheusMetrics {
       ...config,
     };
 
-    this.registry = this.config.register ? register : new Registry();
+    this.registry = this.config.register !== undefined ? register : new Registry();
     this.collector = new MetricsCollector(this.registry);
 
-    if (this.config.collectDefaultMetrics) {
+    if (this.config.collectDefaultMetrics === true) {
       collectDefaultMetrics({
         register: this.registry,
         timeout: this.config.timeout,

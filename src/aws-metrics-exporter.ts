@@ -142,11 +142,13 @@ export class AwsMetricsExporter {
   private async sendMetricsToCloudWatch(metrics: MetricData[]): Promise<void> {
     // This is a placeholder implementation
     // In a real implementation, you would use the AWS SDK to send metrics
-    console.log(`Sending ${metrics.length} metrics to CloudWatch namespace: ${this.config.namespace}`);
-    
+    console.log(
+      `Sending ${metrics.length} metrics to CloudWatch namespace: ${this.config.namespace}`
+    );
+
     // Simulate async operation
     await new Promise(resolve => setTimeout(resolve, 100));
-    
+
     // Log metrics for demonstration
     for (const metric of metrics) {
       console.log(`CloudWatch Metric: ${metric.MetricName} = ${metric.Value}`, metric.Dimensions);
