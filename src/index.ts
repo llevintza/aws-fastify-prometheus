@@ -1,28 +1,32 @@
 /**
- * Main entry point for the aws-node-prometheus library
- * 
- * This library provides utilities for integrating Prometheus metrics
- * with AWS services and Node.js applications.
+ * Fastify Prometheus Metrics Plugin
+ * A comprehensive plugin for collecting and exporting Prometheus metrics in Fastify applications
  * 
  * @packageDocumentation
  */
 
+export { default as fastifyPrometheusPlugin } from './plugin';
+export { AwsMetricsExporter } from './aws-metrics-exporter';
 export { PrometheusMetrics } from './prometheus-metrics';
 export { MetricsCollector } from './metrics-collector';
-export { AwsMetricsExporter } from './aws-metrics-exporter';
 
+// Export all types
 export type {
-  MetricConfig,
-  MetricType,
-  MetricLabels,
-  PrometheusConfig,
+  FastifyPrometheusOptions,
+  HttpMetricsConfig,
+  RequestDurationConfig,
+  RequestCountConfig,
+  ResponseSizeConfig,
+  ErrorCountConfig,
+  SuccessCountConfig,
+  CustomMetricDefinition,
+  CustomMetricConfig,
   AwsExporterConfig,
-  CollectorOptions,
+  MetricLabels,
+  MetricExportData,
+  HttpRequestMetrics,
+  FastifyPrometheusContext,
 } from './types';
 
-export type {
-  Counter,
-  Gauge,
-  Histogram,
-  Summary,
-} from './interfaces';
+// Re-export the plugin as default for easy import
+export { default } from './plugin';

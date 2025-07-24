@@ -18,22 +18,22 @@ jobs:
       uses: actions/setup-node@v4
       with:
         node-version: '18'
-        cache: 'npm'
+        cache: 'yarn'
         registry-url: 'https://registry.npmjs.org'
     
     - name: Install dependencies
-      run: npm ci
+      run: yarn install --immutable
     
     - name: Run tests
-      run: npm test
+      run: yarn test
     
     - name: Build
-      run: npm run build
+      run: yarn build
     
     - name: Publish to npm
-      run: npm publish
+      run: yarn npm publish
       env:
-        NODE_AUTH_TOKEN: ${{ secrets.npm_token }}
+        YARN_NPM_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
     
     - name: Create GitHub Release
       uses: actions/create-release@v1

@@ -33,20 +33,40 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
    cd aws-node-prometheus
    ```
 
-2. Install dependencies:
+2. Install dependencies (this project uses Yarn):
    ```bash
-   npm install
+   yarn install
    ```
 
 3. Run tests:
    ```bash
-   npm test
+   yarn test
    ```
 
 4. Run linting:
    ```bash
-   npm run lint
+   yarn lint
    ```
+
+5. Build the project:
+   ```bash
+   yarn build
+   ```
+
+### Development Workflow
+
+We use Yarn for all development tasks:
+
+- `yarn test` - Run all tests
+- `yarn test:watch` - Run tests in watch mode
+- `yarn test:coverage` - Run tests with coverage report
+- `yarn lint` - Run ESLint
+- `yarn lint:fix` - Fix ESLint issues automatically
+- `yarn format` - Format code with Prettier
+- `yarn format:check` - Check if code is properly formatted
+- `yarn build` - Build the TypeScript project
+- `yarn build:watch` - Build in watch mode
+- `yarn type-check` - Run TypeScript type checking
 
 ## Coding Standards
 
