@@ -1,0 +1,40 @@
+# Global code owners
+* @llevintza
+
+# Documentation
+*.md @llevintza
+docs/ @llevintza
+
+# Configuration files
+*.json @llevintza
+*.yml @llevintza
+*.yaml @llevintza
+.github/ @llevintza
+.editorconfig @llevintza
+.gitignore @llevintza
+.gitattributes @llevintza
+
+# Source code
+src/ @llevintza
+lib/ @llevintza
+*.js @llevintza
+*.ts @llevintza
+
+# Tests
+test/ @llevintza
+tests/ @llevintza
+__tests__/ @llevintza
+*.test.js @llevintza
+*.test.ts @llevintza
+*.spec.js @llevintza
+*.spec.ts @llevintza
+
+# CI/CD
+.github/workflows/ @llevintza
+Dockerfile @llevintza
+docker-compose.yml @llevintza
+
+# Package management
+package.json @llevintza
+package-lock.json @llevintza
+yarn.lock @llevintza
