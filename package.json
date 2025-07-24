@@ -50,9 +50,9 @@
   },
   "homepage": "https://github.com/llevintza/aws-node-prometheus#readme",
   "engines": {
-    "node": ">=16.0.0"
+    "node": ">=20.0.0"
   },
-  "packageManager": "yarn@4.0.0",
+  "packageManager": "yarn@4.6.0",
   "peerDependencies": {
     "fastify": "^4.0.0"
   },

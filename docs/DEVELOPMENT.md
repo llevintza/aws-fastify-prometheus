@@ -2,6 +2,11 @@
 
 This document provides information for developers who want to contribute to or work with the `fastify-prometheus-metrics` plugin.
 
+## Prerequisites
+
+- **Node.js**: Version 20.0.0 or higher (latest LTS recommended)
+- **Yarn**: Version 4.6.0 (managed via Corepack)
+
 ## Package Manager
 
 This project is **maintained using Yarn**, but it's designed to work with any package manager. Users can install and use this package with npm, yarn, or pnpm.
@@ -11,6 +16,12 @@ This project is **maintained using Yarn**, but it's designed to work with any pa
 If you're contributing to this project, please use Yarn to ensure consistency:
 
 ```bash
+# Set up the correct Node.js version (if using nvm)
+nvm use
+
+# Enable Corepack to use the correct Yarn version
+corepack enable
+
 # Install dependencies
 yarn install
 

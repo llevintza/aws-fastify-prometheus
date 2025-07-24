@@ -27,23 +27,40 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ## Development Setup
 
+### Prerequisites
+
+- **Node.js**: Version 20.0.0 or higher (we recommend using the latest LTS version)
+- **Yarn**: Version 4.6.0 (managed via Corepack)
+
+### Getting Started
+
 1. Clone the repository:
    ```bash
    git clone https://github.com/llevintza/aws-node-prometheus.git
    cd aws-node-prometheus
    ```
 
-2. Install dependencies (this project uses Yarn):
+2. Set up the correct Node.js version (if using nvm):
+   ```bash
+   nvm use
+   ```
+
+3. Enable Corepack to use the correct Yarn version:
+   ```bash
+   corepack enable
+   ```
+
+4. Install dependencies:
    ```bash
    yarn install
    ```
 
-3. Run tests:
+5. Run tests:
    ```bash
    yarn test
    ```
 
-4. Run linting:
+6. Run linting:
    ```bash
    yarn lint
    ```

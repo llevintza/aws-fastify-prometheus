@@ -339,12 +339,25 @@ Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.m
 
 ### Development Setup
 
-This project uses Yarn for package management and development workflows:
+This project uses Yarn for package management and development workflows.
+
+#### Prerequisites
+
+- **Node.js**: Version 20.0.0 or higher (we recommend using the latest LTS version)
+- **Yarn**: Version 4.6.0 (managed via Corepack)
+
+#### Getting Started
 
 ```bash
 # Clone the repository
 git clone https://github.com/llevintza/aws-node-prometheus.git
 cd aws-node-prometheus
+
+# If you use nvm, set the correct Node.js version
+nvm use
+
+# Enable Corepack to use the correct Yarn version
+corepack enable
 
 # Install dependencies
 yarn install

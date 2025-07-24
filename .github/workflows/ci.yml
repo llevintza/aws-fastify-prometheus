@@ -13,10 +13,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Enable Corepack
+      run: corepack enable
+    
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'yarn'
     
     - name: Install dependencies
@@ -33,10 +36,13 @@ jobs:
     
     strategy:
       matrix:
-        node-version: [16, 18, 20]
+        node-version: [20, 22]
     
     steps:
     - uses: actions/checkout@v4
+    
+    - name: Enable Corepack
+      run: corepack enable
     
     - name: Use Node.js ${{ matrix.node-version }}
       uses: actions/setup-node@v4
@@ -51,7 +57,7 @@ jobs:
       run: yarn test
     
     - name: Upload coverage to Codecov
-      if: matrix.node-version == 18
+      if: matrix.node-version == 22
       uses: codecov/codecov-action@v3
 
   build:
@@ -61,10 +67,13 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     
+    - name: Enable Corepack
+      run: corepack enable
+    
     - name: Use Node.js
       uses: actions/setup-node@v4
       with:
-        node-version: '18'
+        node-version: '22'
         cache: 'yarn'
     
     - name: Install dependencies
