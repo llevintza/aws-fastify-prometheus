@@ -1,3 +1,16 @@
+## 1.0.0-alpha.1 (2025-07-25)
+
+
+### Features
+
+* add fastify-prometheus-metrics workspace dependency and update configuration ([d6b1ff7](https://github.com/llevintza/aws-fastify-prometheus/commit/d6b1ff72701cdddd5bbe09e2bec62f00c8e7b736))
+* update package name and configuration for GitHub Packages ([48f1f5f](https://github.com/llevintza/aws-fastify-prometheus/commit/48f1f5f219d332ac504dc08f8c296275d0c249d0))
+
+
+### Bug Fixes
+
+* update GitHub token reference in CI workflow ([b284543](https://github.com/llevintza/aws-fastify-prometheus/commit/b284543ab2782daff5347b1861e3cc4af2548f8a))
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
