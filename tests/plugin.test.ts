@@ -2,16 +2,31 @@
  * Tests for the Fastify Prometheus Plugin
  */
 
-import { test } from '@jest/globals';
+import { describe, test, expect, beforeEach, afterEach } from '@jest/globals';
 import Fastify from 'fastify';
+import { Registry } from 'prom-client';
 
 import fastifyPrometheusPlugin from '../src/index';
 
 describe('Fastify Prometheus Plugin', () => {
+  let registry: Registry;
+
+  beforeEach(() => {
+    // Create a new registry for each test to avoid metric conflicts
+    registry = new Registry();
+  });
+
+  afterEach(() => {
+    // Clear the registry after each test
+    registry.clear();
+  });
+
   test('should register plugin successfully', async () => {
     const fastify = Fastify();
 
-    await expect(fastify.register(fastifyPrometheusPlugin)).resolves.not.toThrow();
+    await expect(fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+    })).resolves.not.toThrow();
 
     await fastify.close();
   });
@@ -21,6 +36,7 @@ describe('Fastify Prometheus Plugin', () => {
 
     await fastify.register(fastifyPrometheusPlugin, {
       endpoint: '/metrics',
+      register: registry,
     });
 
     const response = await fastify.inject({
@@ -37,7 +53,9 @@ describe('Fastify Prometheus Plugin', () => {
   test('should collect HTTP metrics', async () => {
     const fastify = Fastify();
 
-    await fastify.register(fastifyPrometheusPlugin);
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+    });
 
     fastify.get('/test', async () => ({ message: 'test' }));
 
@@ -64,6 +82,7 @@ describe('Fastify Prometheus Plugin', () => {
     const fastify = Fastify();
 
     await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
       customMetrics: [
         {
           type: 'counter',
@@ -91,6 +110,7 @@ describe('Fastify Prometheus Plugin', () => {
     const fastify = Fastify();
 
     await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
       excludeRoutes: ['/excluded'],
     });
 
@@ -119,9 +139,13 @@ describe('Fastify Prometheus Plugin', () => {
     const customBuckets = [10, 50, 100, 500, 1000];
 
     await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
       httpMetrics: {
         requestDuration: {
           enabled: true,
+          name: 'http_request_duration_ms',
+          help: 'Duration of HTTP requests in milliseconds',
+          labels: ['method', 'route', 'status_code'],
           buckets: customBuckets,
         },
       },
@@ -154,6 +178,7 @@ describe('Fastify Prometheus Plugin', () => {
     const fastify = Fastify();
 
     await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
       customMetrics: [
         {
           type: 'gauge',
