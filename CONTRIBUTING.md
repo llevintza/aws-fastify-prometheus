@@ -1,10 +1,17 @@
-# Contributing to aws-node-prometheus
+# Contributing to @xoon/fastify-prometheus-metrics
 
-Thank you for your interest in contributing to aws-node-prometheus! We welcome contributions from everyone.
+Thank you for your interest in contributing to `@xoon/fastify-prometheus-metrics`! We welcome contributions from everyone and have established a streamlined process to make contributing as easy as possible.
 
 ## Code of Conduct
 
 This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code.
+
+## Quick Links
+
+- 📋 [Branching and Release Strategy](./docs/BRANCHING_STRATEGY.md)
+- 🛠️ [Development Guide](./docs/DEVELOPMENT.md)
+- 🐛 [Report a Bug](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=bug_report.yml)
+- 💡 [Request a Feature](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=feature_request.yml)
 
 ## How to Contribute
 
@@ -18,12 +25,14 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ### Pull Requests
 
-1. Fork the repo and create your branch from `main`
-2. If you've added code that should be tested, add tests
-3. If you've changed APIs, update the documentation
-4. Ensure the test suite passes
-5. Make sure your code lints
-6. Issue that pull request!
+We follow a **trunk-based development** model. Please read our [Branching Strategy](./docs/BRANCHING_STRATEGY.md) for detailed information.
+
+**Quick Overview:**
+1. Fork the repo and create a feature branch from `main`: `feature/your-feature-name`
+2. Develop your feature using [conventional commits](https://www.conventionalcommits.org/)
+3. Test your changes with the automatically generated alpha releases
+4. Create a pull request to merge back to `main`
+5. After review and approval, your changes will be included in the next stable release
 
 ## Development Setup
 
@@ -36,8 +45,8 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 1. Clone the repository:
    ```bash
-   git clone https://github.com/llevintza/aws-node-prometheus.git
-   cd aws-node-prometheus
+   git clone https://github.com/llevintza/aws-fastify-prometheus.git
+   cd aws-fastify-prometheus
    ```
 
 2. Set up the correct Node.js version (if using nvm):
@@ -48,6 +57,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 3. Enable Corepack to use the correct Yarn version:
    ```bash
    corepack enable
+   ```
    ```
 
 4. Install dependencies:
@@ -69,6 +79,65 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
    ```bash
    yarn build
    ```
+
+## Branching and Release Workflow
+
+We follow a **trunk-based development** approach with automated releases. For complete details, see our [Branching Strategy Guide](./docs/BRANCHING_STRATEGY.md).
+
+### Feature Development
+
+1. **Create Feature Branch**:
+   ```bash
+   git checkout main
+   git pull origin main
+   git checkout -b feature/your-feature-name
+   ```
+
+2. **Develop and Test**:
+   ```bash
+   # Make your changes
+   git add .
+   git commit -m "feat: add new metrics configuration"
+   git push origin feature/your-feature-name
+   ```
+
+3. **Test Alpha Release**:
+   - Pushing to your feature branch automatically creates an alpha release (e.g., `1.0.0-alpha.1`)
+   - Test the alpha release to ensure your changes work correctly
+   - Install with: `npm install @xoon/fastify-prometheus-metrics@alpha`
+
+4. **Create Pull Request**:
+   - Create PR from your feature branch to `main`
+   - Include thorough description and testing notes
+   - Reference any related issues
+
+### Commit Message Format
+
+We use [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning:
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+**Common Types:**
+- `feat:` - New feature (minor version bump)
+- `fix:` - Bug fix (patch version bump)
+- `docs:` - Documentation changes (patch version bump)
+- `refactor:` - Code refactoring (patch version bump)
+- `test:` - Test changes (no release)
+- `chore:` - Maintenance tasks (no release)
+
+**Breaking Changes:**
+```bash
+feat!: redesign plugin API
+
+BREAKING CHANGE: Configuration format has changed.
+See migration guide for details.
+```
 
 ### Development Workflow
 
