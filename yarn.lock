@@ -5324,6 +5324,7 @@ __metadata:
     "@commitlint/cli": "npm:^18.4.3"
     "@commitlint/config-conventional": "npm:^18.4.3"
     "@eslint/js": "npm:^9.31.0"
+    "@jest/globals": "npm:^29.7.0"
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
     "@types/jest": "npm:^29.5.8"
