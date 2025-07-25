@@ -1,3 +1,10 @@
+## [1.0.0-alpha.2](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2025-07-25)
+
+
+### Features
+
+* trigger initial alpha release for GitHub Packages publishing ([b32b221](https://github.com/llevintza/aws-fastify-prometheus/commit/b32b2216233e982df783e174cba71ae6a048b854))
+
 ## 1.0.0-alpha.1 (2025-07-25)
 
 
