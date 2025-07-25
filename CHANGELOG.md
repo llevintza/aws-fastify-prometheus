@@ -7,7 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [1.0.0] - 2025-07-24
+### Changed
+- Package name changed from `fastify-prometheus-metrics` to `@xoon/fastify-prometheus-metrics`
+- Publishing configuration updated to use GitHub Packages with `@xoon` scope
+- Documentation updated to reflect new package name and installation instructions
+- Added automated CI/CD pipeline with semantic-release for GitHub Packages
+- Implemented trunk-based development with prerelease support
+- Initial release will be `0.0.1-alpha` version
+- Created comprehensive branching and release strategy documentation
+- Updated contributing guidelines for trunk-based development workflow
+
+### Added
+- Branching strategy documentation (`docs/BRANCHING_STRATEGY.md`)
+- Support for alpha releases from `feature/*` branches
+- Support for beta releases from `release/*` branches
+- Automated semantic versioning and publishing
+
+## [0.0.0] - 2025-07-24
 
 ### Added
 - Initial release of Fastify Prometheus Metrics Plugin
@@ -39,5 +55,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - AWS CloudWatch integration settings
 - Custom metric definitions
 
-[Unreleased]: https://github.com/llevintza/aws-node-prometheus/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/llevintza/aws-node-prometheus/releases/tag/v1.0.0
+[Unreleased]: https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/llevintza/aws-fastify-prometheus/releases/tag/v1.0.0

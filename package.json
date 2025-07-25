@@ -1,6 +1,6 @@
 {
-  "name": "fastify-prometheus-metrics",
-  "version": "1.0.0",
+  "name": "@xoon/fastify-prometheus-metrics",
+  "version": "0.0.0",
   "description": "A comprehensive Fastify plugin for Prometheus metrics collection with AWS CloudWatch integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,12 +43,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/llevintza/aws-node-prometheus.git"
+    "url": "https://github.com/llevintza/aws-fastify-prometheus.git"
   },
   "bugs": {
-    "url": "https://github.com/llevintza/aws-node-prometheus/issues"
+    "url": "https://github.com/llevintza/aws-fastify-prometheus/issues"
   },
-  "homepage": "https://github.com/llevintza/aws-node-prometheus#readme",
+  "homepage": "https://github.com/llevintza/aws-fastify-prometheus#readme",
   "engines": {
     "node": ">=20.0.0"
   },
@@ -91,6 +91,7 @@
     "prom-client": "^15.1.0"
   },
   "publishConfig": {
+    "registry": "https://npm.pkg.github.com",
     "access": "public"
   }
 }
