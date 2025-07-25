@@ -30,13 +30,12 @@ export class PrometheusMetrics {
       ...config,
     };
 
-    this.registry = this.config.register !== undefined ? register : new Registry();
+    this.registry = this.config.register ? register : new Registry();
     this.collector = new MetricsCollector(this.registry);
 
-    if (this.config.collectDefaultMetrics === true) {
+    if (this.config.collectDefaultMetrics) {
       collectDefaultMetrics({
         register: this.registry,
-        timeout: this.config.timeout,
         prefix: this.config.prefix,
         labels: this.config.defaultLabels,
       });

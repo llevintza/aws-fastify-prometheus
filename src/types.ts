@@ -6,6 +6,59 @@ import type { FastifyPluginOptions } from 'fastify';
 import type { register } from 'prom-client';
 
 /**
+ * Prometheus metrics configuration interface
+ */
+export interface PrometheusConfig {
+  /** Default labels to apply to all metrics */
+  defaultLabels?: Record<string, string>;
+  /** Prefix for metric names */
+  prefix?: string;
+  /** Whether to use global registry */
+  register?: boolean;
+  /** Whether to collect default metrics */
+  collectDefaultMetrics?: boolean;
+  /** Timeout for default metrics collection */
+  timeout?: number;
+}
+
+/**
+ * Metric configuration interface  
+ */
+export interface MetricConfig {
+  /** Metric type */
+  type: 'counter' | 'gauge' | 'histogram' | 'summary';
+  /** Metric name */
+  name: string;
+  /** Metric help text */
+  help: string;
+  /** Label names */
+  labelNames?: string[];
+  /** Additional configuration for histogram/summary */
+  buckets?: number[];
+  percentiles?: number[];
+  maxAgeSeconds?: number;
+  ageBuckets?: number;
+}
+
+/**
+ * Collector options interface
+ */
+export interface CollectorOptions {
+  /** Prefix for metric names */
+  prefix?: string;
+  /** Default labels */
+  defaultLabels?: Record<string, string>;
+  /** Filters for metric collection */
+  filters?: Array<(metricName: string) => boolean>;
+  /** Whether metrics collection is enabled */
+  enabled?: boolean;
+  /** Collection interval in milliseconds */
+  interval?: number;
+  /** Additional labels */
+  labels?: Record<string, string>;
+}
+
+/**
  * Plugin configuration options
  */
 export interface FastifyPrometheusOptions extends FastifyPluginOptions {

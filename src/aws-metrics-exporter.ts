@@ -8,7 +8,7 @@ import type { AwsExporterConfig, MetricLabels } from './types';
  * AwsMetricsExporter class for exporting metrics to AWS CloudWatch
  */
 export class AwsMetricsExporter {
-  private readonly config: Required<AwsExporterConfig>;
+  private readonly config: AwsExporterConfig & { batchSize: number; flushInterval: number };
   private metricsBuffer: MetricData[] = [];
   private flushTimer: NodeJS.Timeout | null = null;
 
@@ -17,12 +17,14 @@ export class AwsMetricsExporter {
    * @param config - AWS exporter configuration
    */
   constructor(config: AwsExporterConfig) {
-    this.config = {
+    const defaults = {
       region: 'us-east-1',
       batchSize: 20,
       flushInterval: 60000, // 1 minute
-      endpoint: undefined,
-      credentials: undefined,
+    };
+
+    this.config = {
+      ...defaults,
       ...config,
     };
 

@@ -11,7 +11,7 @@ import {
 } from 'prom-client';
 
 import type { Counter, Gauge, Histogram, Summary } from './interfaces';
-import type { MetricConfig, MetricLabels, CollectorOptions } from './types';
+import type { MetricConfig, CollectorOptions } from './types';
 
 /**
  * MetricsCollector class for creating and managing metrics
@@ -28,10 +28,12 @@ export class MetricsCollector {
   constructor(registry: Registry, options: CollectorOptions = {}) {
     this.registry = registry;
     this.options = {
+      prefix: '',
+      defaultLabels: {},
+      filters: [],
       enabled: true,
       interval: 10000,
       labels: {},
-      filters: [],
       ...options,
     };
   }
@@ -49,7 +51,7 @@ export class MetricsCollector {
       registers: [this.registry],
     });
 
-    return counter as Counter;
+    return counter as unknown as Counter;
   }
 
   /**
@@ -65,7 +67,7 @@ export class MetricsCollector {
       registers: [this.registry],
     });
 
-    return gauge as Gauge;
+    return gauge as unknown as Gauge;
   }
 
   /**
@@ -74,15 +76,19 @@ export class MetricsCollector {
    * @returns Histogram instance
    */
   public createHistogram(config: MetricConfig): Histogram {
-    const histogram = new PromHistogram({
+    const histogramConfig: any = {
       name: this.buildMetricName(config.name),
       help: config.help,
       labelNames: config.labelNames as string[],
-      buckets: config.buckets,
       registers: [this.registry],
-    });
+    };
+    
+    if (config.buckets) {
+      histogramConfig.buckets = config.buckets;
+    }
 
-    return histogram as Histogram;
+    const histogram = new PromHistogram(histogramConfig);
+    return histogram as unknown as Histogram;
   }
 
   /**
@@ -91,17 +97,25 @@ export class MetricsCollector {
    * @returns Summary instance
    */
   public createSummary(config: MetricConfig): Summary {
-    const summary = new PromSummary({
+    const summaryConfig: any = {
       name: this.buildMetricName(config.name),
       help: config.help,
       labelNames: config.labelNames as string[],
-      percentiles: config.percentiles,
-      maxAgeSeconds: config.maxAgeSeconds,
-      ageBuckets: config.ageBuckets,
       registers: [this.registry],
-    });
+    };
+    
+    if (config.percentiles) {
+      summaryConfig.percentiles = config.percentiles;
+    }
+    if (config.maxAgeSeconds) {
+      summaryConfig.maxAgeSeconds = config.maxAgeSeconds;
+    }
+    if (config.ageBuckets) {
+      summaryConfig.ageBuckets = config.ageBuckets;
+    }
 
-    return summary as Summary;
+    const summary = new PromSummary(summaryConfig);
+    return summary as unknown as Summary;
   }
 
   /**
@@ -134,8 +148,8 @@ export class MetricsCollector {
    * @returns Full metric name
    */
   private buildMetricName(name: string): string {
-    const prefix = this.options.labels.prefix as string | undefined;
-    return prefix !== undefined && prefix !== '' ? `${prefix}_${name}` : name;
+    const prefix = this.options.prefix;
+    return prefix ? `${prefix}_${name}` : name;
   }
 
   /**
@@ -143,28 +157,25 @@ export class MetricsCollector {
    * @param labels - Metric-specific labels
    * @returns Merged labels
    */
-  private applyDefaultLabels(labels: MetricLabels = {}): MetricLabels {
-    return { ...this.options.labels, ...labels };
-  }
+  // private applyDefaultLabels(labels: MetricLabels = {}): MetricLabels {
+  //   return { ...this.options.defaultLabels, ...labels };
+  // }
 
   /**
    * Check if metric should be collected based on filters
    * @param metricName - Name of the metric
    * @returns True if metric should be collected
    */
-  private shouldCollectMetric(metricName: string): boolean {
-    if (this.options.filters.length === 0) {
-      return true;
-    }
+  // private shouldCollectMetric(metricName: string): boolean {
+  //   if (!this.options.filters || this.options.filters.length === 0) {
+  //     return true;
+  //   }
 
-    return this.options.filters.some((filter: string) => {
-      if (filter.startsWith('!')) {
-        // Exclusion filter
-        const pattern = filter.slice(1);
-        return !metricName.includes(pattern);
-      }
-      // Inclusion filter
-      return metricName.includes(filter);
-    });
-  }
+  //   return this.options.filters.some(filter => {
+  //     if (typeof filter === 'function') {
+  //       return filter(metricName);
+  //     }
+  //     return false;
+  //   });
+  // }
 }

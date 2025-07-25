@@ -39,7 +39,7 @@ describe('Fastify Prometheus Plugin', () => {
 
     await fastify.register(fastifyPrometheusPlugin);
 
-    fastify.get('/test', () => ({ message: 'test' }));
+    fastify.get('/test', async () => ({ message: 'test' }));
 
     // Make a request to generate metrics
     await fastify.inject({
@@ -94,8 +94,8 @@ describe('Fastify Prometheus Plugin', () => {
       excludeRoutes: ['/excluded'],
     });
 
-    fastify.get('/included', () => ({ message: 'included' }));
-    fastify.get('/excluded', () => ({ message: 'excluded' }));
+    fastify.get('/included', async () => ({ message: 'included' }));
+    fastify.get('/excluded', async () => ({ message: 'excluded' }));
 
     // Make requests
     await fastify.inject({ method: 'GET', url: '/included' });

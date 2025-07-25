@@ -72,9 +72,9 @@ const DEFAULT_OPTIONS: Partial<FastifyPrometheusOptions> = {
 const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = async (
   fastify: FastifyInstance,
   options: FastifyPrometheusOptions
-): Promise<void> => {
+) => {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  const metricsRegistry = config.register ?? register;
+  const metricsRegistry = config.register || register;
 
   // Store metrics instances
   const metrics = new Map<string, Counter | Gauge | Histogram | Summary>();
@@ -91,26 +91,23 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   }
 
   // Enable default metrics collection
-  if (config.enableDefaultMetrics === true) {
+  if (config.enableDefaultMetrics) {
     collectDefaultMetrics({
       register: metricsRegistry,
-      timeout: config.defaultMetricsInterval,
     });
   }
 
   // Initialize HTTP metrics
-  if (config.httpMetrics) {
-    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry);
-  }
+  initializeHttpMetrics(config.httpMetrics!, metrics, metricsRegistry);
 
   // Initialize custom metrics
-  if (config.customMetrics !== undefined) {
+  if (config.customMetrics) {
     initializeCustomMetrics(config.customMetrics, metrics, metricsRegistry);
   }
 
   // Add metrics endpoint
-  if (config.endpoint !== undefined && config.endpoint !== '') {
-    fastify.get(config.endpoint, async (request, reply) => {
+  if (config.endpoint) {
+    fastify.get(config.endpoint, async (_, reply) => {
       reply.type('text/plain');
       return metricsRegistry.metrics();
     });
@@ -131,14 +128,13 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     // Skip if only specific routes are included and this route is not included
     if (
-      config.includeRoutes !== undefined &&
-      config.includeRoutes.length > 0 &&
+      config.includeRoutes &&
       !config.includeRoutes.some(includedRoute => route.includes(includedRoute))
     ) {
       return;
     }
 
-    const duration = request.startTime !== undefined ? Date.now() - request.startTime : 0;
+    const duration = request.startTime ? Date.now() - request.startTime : 0;
     const labels = {
       method: request.method,
       route,
@@ -146,15 +142,27 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     };
 
     // Record HTTP metrics
+    const contentLength = reply.getHeader('content-length');
+    const responseSize = typeof contentLength === 'string' 
+      ? parseInt(contentLength, 10) 
+      : typeof contentLength === 'number' 
+        ? contentLength 
+        : undefined;
+
+    const metricsData: HttpRequestMetrics = {
+      method: request.method,
+      route,
+      statusCode: reply.statusCode,
+      duration,
+      labels,
+    };
+
+    if (responseSize !== undefined) {
+      metricsData.responseSize = responseSize;
+    }
+
     recordHttpMetrics(
-      {
-        method: request.method,
-        route,
-        statusCode: reply.statusCode,
-        duration,
-        responseSize: reply.getHeader('content-length') as number | undefined,
-        labels,
-      },
+      metricsData,
       config.httpMetrics!,
       metrics,
       awsExporter
@@ -174,7 +182,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
       const metric = metrics.get(name) as Counter;
       if (metric) {
-        metric.inc(labels, value);
+        if (labels) {
+          metric.inc(labels, value);
+        } else {
+          metric.inc(value);
+        }
 
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
@@ -185,7 +197,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     setGauge(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Gauge;
       if (metric) {
-        metric.set(labels, value);
+        if (labels) {
+          metric.set(labels, value);
+        } else {
+          metric.set(value);
+        }
 
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
@@ -196,7 +212,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     observeHistogram(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Histogram;
       if (metric) {
-        metric.observe(labels, value);
+        if (labels) {
+          metric.observe(labels, value);
+        } else {
+          metric.observe(value);
+        }
 
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
@@ -207,7 +227,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     observeSummary(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Summary;
       if (metric) {
-        metric.observe(labels, value);
+        if (labels) {
+          metric.observe(labels, value);
+        } else {
+          metric.observe(value);
+        }
 
         if (awsExporter) {
           awsExporter.exportMetric(name, value, labels);
@@ -306,43 +330,71 @@ function initializeCustomMetrics(
 
     switch (metricDef.type) {
       case 'counter':
-        metric = new Counter({
-          name: metricDef.name,
-          help: metricDef.help,
-          labelNames: metricDef.labels,
-          registers: [registry],
-        });
+        {
+          const config: any = {
+            name: metricDef.name,
+            help: metricDef.help,
+            registers: [registry],
+          };
+          if (metricDef.labels) {
+            config.labelNames = metricDef.labels;
+          }
+          metric = new Counter(config);
+        }
         break;
 
       case 'gauge':
-        metric = new Gauge({
-          name: metricDef.name,
-          help: metricDef.help,
-          labelNames: metricDef.labels,
-          registers: [registry],
-        });
+        {
+          const config: any = {
+            name: metricDef.name,
+            help: metricDef.help,
+            registers: [registry],
+          };
+          if (metricDef.labels) {
+            config.labelNames = metricDef.labels;
+          }
+          metric = new Gauge(config);
+        }
         break;
 
       case 'histogram':
-        metric = new Histogram({
-          name: metricDef.name,
-          help: metricDef.help,
-          labelNames: metricDef.labels,
-          buckets: metricDef.config?.buckets,
-          registers: [registry],
-        });
+        {
+          const config: any = {
+            name: metricDef.name,
+            help: metricDef.help,
+            registers: [registry],
+          };
+          if (metricDef.labels) {
+            config.labelNames = metricDef.labels;
+          }
+          if (metricDef.config?.buckets) {
+            config.buckets = metricDef.config.buckets;
+          }
+          metric = new Histogram(config);
+        }
         break;
 
       case 'summary':
-        metric = new Summary({
-          name: metricDef.name,
-          help: metricDef.help,
-          labelNames: metricDef.labels,
-          percentiles: metricDef.config?.percentiles,
-          maxAgeSeconds: metricDef.config?.maxAgeSeconds,
-          ageBuckets: metricDef.config?.ageBuckets,
-          registers: [registry],
-        });
+        {
+          const config: any = {
+            name: metricDef.name,
+            help: metricDef.help,
+            registers: [registry],
+          };
+          if (metricDef.labels) {
+            config.labelNames = metricDef.labels;
+          }
+          if (metricDef.config?.percentiles) {
+            config.percentiles = metricDef.config.percentiles;
+          }
+          if (metricDef.config?.maxAgeSeconds) {
+            config.maxAgeSeconds = metricDef.config.maxAgeSeconds;
+          }
+          if (metricDef.config?.ageBuckets) {
+            config.ageBuckets = metricDef.config.ageBuckets;
+          }
+          metric = new Summary(config);
+        }
         break;
 
       default:
@@ -369,7 +421,11 @@ function recordHttpMetrics(
   if (config.requestDuration?.enabled) {
     const metric = metrics.get(config.requestDuration.name!) as Histogram;
     if (metric) {
-      metric.observe(requestMetrics.labels, requestMetrics.duration);
+      if (requestMetrics.labels) {
+        metric.observe(requestMetrics.labels, requestMetrics.duration);
+      } else {
+        metric.observe(requestMetrics.duration);
+      }
     }
   }
 
@@ -377,7 +433,11 @@ function recordHttpMetrics(
   if (config.requestCount?.enabled) {
     const metric = metrics.get(config.requestCount.name!) as Counter;
     if (metric) {
-      metric.inc(requestMetrics.labels);
+      if (requestMetrics.labels) {
+        metric.inc(requestMetrics.labels);
+      } else {
+        metric.inc();
+      }
     }
   }
 
@@ -385,7 +445,11 @@ function recordHttpMetrics(
   if (config.responseSize?.enabled && requestMetrics.responseSize) {
     const metric = metrics.get(config.responseSize.name!) as Histogram;
     if (metric) {
-      metric.observe(requestMetrics.labels, requestMetrics.responseSize);
+      if (requestMetrics.labels) {
+        metric.observe(requestMetrics.labels, requestMetrics.responseSize);
+      } else {
+        metric.observe(requestMetrics.responseSize);
+      }
     }
   }
 
@@ -393,7 +457,11 @@ function recordHttpMetrics(
   if (config.errorCount?.enabled && isError) {
     const metric = metrics.get(config.errorCount.name!) as Counter;
     if (metric) {
-      metric.inc(requestMetrics.labels);
+      if (requestMetrics.labels) {
+        metric.inc(requestMetrics.labels);
+      } else {
+        metric.inc();
+      }
     }
   }
 
@@ -401,7 +469,11 @@ function recordHttpMetrics(
   if (config.successCount?.enabled && isSuccess) {
     const metric = metrics.get(config.successCount.name!) as Counter;
     if (metric) {
-      metric.inc(requestMetrics.labels);
+      if (requestMetrics.labels) {
+        metric.inc(requestMetrics.labels);
+      } else {
+        metric.inc();
+      }
     }
   }
 
