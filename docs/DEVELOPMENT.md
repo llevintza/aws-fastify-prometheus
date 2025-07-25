@@ -1,6 +1,6 @@
 # Development Guide
 
-This document provides information for developers who want to contribute to or work with the `fastify-prometheus-metrics` plugin.
+This document provides information for developers who want to contribute to or work with the `@xoon/fastify-prometheus-metrics` plugin.
 
 ## Prerequisites
 
