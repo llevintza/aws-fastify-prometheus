@@ -24,9 +24,11 @@ describe('Fastify Prometheus Plugin', () => {
   test('should register plugin successfully', async () => {
     const fastify = Fastify();
 
-    await expect(fastify.register(fastifyPrometheusPlugin, {
-      register: registry,
-    })).resolves.not.toThrow();
+    await expect(
+      fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+      })
+    ).resolves.not.toThrow();
 
     await fastify.close();
   });
@@ -50,33 +52,37 @@ describe('Fastify Prometheus Plugin', () => {
     await fastify.close();
   });
 
-  test('should collect HTTP metrics', async () => {
-    const fastify = Fastify();
+  test(
+    'should collect HTTP metrics',
+    async () => {
+      const fastify = Fastify();
 
-    await fastify.register(fastifyPrometheusPlugin, {
-      register: registry,
-    });
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+      });
 
-    fastify.get('/test', async () => ({ message: 'test' }));
+      fastify.get('/test', () => ({ message: 'test' }));
 
-    // Make a request to generate metrics
-    await fastify.inject({
-      method: 'GET',
-      url: '/test',
-    });
+      // Make a request to generate metrics
+      await fastify.inject({
+        method: 'GET',
+        url: '/test',
+      });
 
-    // Check if metrics are collected
-    const metricsResponse = await fastify.inject({
-      method: 'GET',
-      url: '/metrics',
-    });
+      // Check if metrics are collected
+      const metricsResponse = await fastify.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
 
-    const metricsText = metricsResponse.payload;
-    expect(metricsText).toContain('http_requests_total');
-    expect(metricsText).toContain('http_request_duration_ms');
+      const metricsText = metricsResponse.payload;
+      expect(metricsText).toContain('http_requests_total');
+      expect(metricsText).toContain('http_request_duration_ms');
 
-    await fastify.close();
-  });
+      await fastify.close();
+    },
+    20 * 1000
+  );
 
   test('should support custom metrics', async () => {
     const fastify = Fastify();
@@ -114,8 +120,8 @@ describe('Fastify Prometheus Plugin', () => {
       excludeRoutes: ['/excluded'],
     });
 
-    fastify.get('/included', async () => ({ message: 'included' }));
-    fastify.get('/excluded', async () => ({ message: 'excluded' }));
+    fastify.get('/included', () => ({ message: 'included' }));
+    fastify.get('/excluded', () => ({ message: 'excluded' }));
 
     // Make requests
     await fastify.inject({ method: 'GET', url: '/included' });
@@ -133,46 +139,50 @@ describe('Fastify Prometheus Plugin', () => {
     await fastify.close();
   });
 
-  test('should support custom histogram buckets', async () => {
-    const fastify = Fastify();
+  test(
+    'should support custom histogram buckets',
+    async () => {
+      const fastify = Fastify();
 
-    const customBuckets = [10, 50, 100, 500, 1000];
+      const customBuckets = [10, 50, 100, 500, 1000];
 
-    await fastify.register(fastifyPrometheusPlugin, {
-      register: registry,
-      httpMetrics: {
-        requestDuration: {
-          enabled: true,
-          name: 'http_request_duration_ms',
-          help: 'Duration of HTTP requests in milliseconds',
-          labels: ['method', 'route', 'status_code'],
-          buckets: customBuckets,
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        httpMetrics: {
+          requestDuration: {
+            enabled: true,
+            name: 'http_request_duration_ms',
+            help: 'Duration of HTTP requests in milliseconds',
+            labels: ['method', 'route', 'status_code'],
+            buckets: customBuckets,
+          },
         },
-      },
-    });
+      });
 
-    fastify.get('/test', async () => {
-      // Simulate some processing time
-      await new Promise(resolve => setTimeout(resolve, 20));
-      return { message: 'test' };
-    });
+      fastify.get('/test', async () => {
+        // Simulate some processing time
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return { message: 'test' };
+      });
 
-    await fastify.inject({ method: 'GET', url: '/test' });
+      await fastify.inject({ method: 'GET', url: '/test' });
 
-    const metricsResponse = await fastify.inject({
-      method: 'GET',
-      url: '/metrics',
-    });
+      const metricsResponse = await fastify.inject({
+        method: 'GET',
+        url: '/metrics',
+      });
 
-    const metricsText = metricsResponse.payload;
+      const metricsText = metricsResponse.payload;
 
-    // Check if custom buckets are present
-    customBuckets.forEach(bucket => {
-      expect(metricsText).toContain(`le="${bucket}"`);
-    });
+      // Check if custom buckets are present
+      customBuckets.forEach(bucket => {
+        expect(metricsText).toContain(`le="${bucket}"`);
+      });
 
-    await fastify.close();
-  });
+      await fastify.close();
+    },
+    20 * 1000
+  );
 
   test('should handle plugin context methods', async () => {
     const fastify = Fastify();

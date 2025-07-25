@@ -76,13 +76,21 @@ export class MetricsCollector {
    * @returns Histogram instance
    */
   public createHistogram(config: MetricConfig): Histogram {
-    const histogramConfig: any = {
+    interface HistogramConfig {
+      name: string;
+      help: string;
+      labelNames: string[];
+      registers: Registry[];
+      buckets?: number[];
+    }
+
+    const histogramConfig: HistogramConfig = {
       name: this.buildMetricName(config.name),
       help: config.help,
       labelNames: config.labelNames as string[],
       registers: [this.registry],
     };
-    
+
     if (config.buckets) {
       histogramConfig.buckets = config.buckets;
     }
@@ -97,20 +105,30 @@ export class MetricsCollector {
    * @returns Summary instance
    */
   public createSummary(config: MetricConfig): Summary {
-    const summaryConfig: any = {
+    interface SummaryConfig {
+      name: string;
+      help: string;
+      labelNames: string[];
+      registers: Registry[];
+      percentiles?: number[];
+      maxAgeSeconds?: number;
+      ageBuckets?: number;
+    }
+
+    const summaryConfig: SummaryConfig = {
       name: this.buildMetricName(config.name),
       help: config.help,
       labelNames: config.labelNames as string[],
       registers: [this.registry],
     };
-    
+
     if (config.percentiles) {
       summaryConfig.percentiles = config.percentiles;
     }
-    if (config.maxAgeSeconds) {
+    if (typeof config.maxAgeSeconds === 'number' && config.maxAgeSeconds > 0) {
       summaryConfig.maxAgeSeconds = config.maxAgeSeconds;
     }
-    if (config.ageBuckets) {
+    if (typeof config.ageBuckets === 'number' && config.ageBuckets > 0) {
       summaryConfig.ageBuckets = config.ageBuckets;
     }
 

@@ -13,8 +13,8 @@ module.exports = {
   ],
   extends: [
     'eslint:recommended',
-    '@typescript-eslint/recommended',
-    '@typescript-eslint/recommended-requiring-type-checking',
+    'plugin:@typescript-eslint/recommended',
+    'plugin:@typescript-eslint/recommended-requiring-type-checking',
     'plugin:import/recommended',
     'plugin:import/typescript',
     'plugin:jest/recommended',
@@ -63,6 +63,8 @@ module.exports = {
     ],
     '@typescript-eslint/consistent-type-exports': 'error',
     '@typescript-eslint/no-import-type-side-effects': 'error',
+    '@typescript-eslint/no-unsafe-member-access': 'error',
+    '@typescript-eslint/no-unsafe-argument': 'error',
 
     // Import rules
     'import/order': [

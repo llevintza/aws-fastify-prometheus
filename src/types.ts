@@ -22,7 +22,7 @@ export interface PrometheusConfig {
 }
 
 /**
- * Metric configuration interface  
+ * Metric configuration interface
  */
 export interface MetricConfig {
   /** Metric type */

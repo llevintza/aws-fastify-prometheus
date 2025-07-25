@@ -74,7 +74,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   options: FastifyPrometheusOptions
 ) => {
   const config = { ...DEFAULT_OPTIONS, ...options };
-  const metricsRegistry = config.register || register;
+  const metricsRegistry = config.register ?? register;
 
   // Store metrics instances
   const metrics = new Map<string, Counter | Gauge | Histogram | Summary>();
@@ -91,50 +91,63 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   }
 
   // Enable default metrics collection
-  if (config.enableDefaultMetrics) {
+  if (config.enableDefaultMetrics === true) {
     collectDefaultMetrics({
       register: metricsRegistry,
     });
   }
 
   // Initialize HTTP metrics
-  initializeHttpMetrics(config.httpMetrics!, metrics, metricsRegistry);
+  if (config.httpMetrics) {
+    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry);
+  }
 
   // Initialize custom metrics
-  if (config.customMetrics) {
+  if (config.customMetrics && config.customMetrics.length > 0) {
     initializeCustomMetrics(config.customMetrics, metrics, metricsRegistry);
   }
 
   // Add metrics endpoint
-  if (config.endpoint) {
-    fastify.get(config.endpoint, async (_, reply) => {
-      reply.type('text/plain');
-      return metricsRegistry.metrics();
+  if (typeof config.endpoint === 'string' && config.endpoint.length > 0) {
+    fastify.route({
+      method: 'GET',
+      url: config.endpoint,
+      handler: async (_request: FastifyRequest, reply: FastifyReply) => {
+        void reply.type('text/plain');
+        return metricsRegistry.metrics();
+      },
     });
   }
 
   // Add request tracking hooks
-  fastify.addHook('onRequest', async (request: FastifyRequest) => {
+  void fastify.addHook('onRequest', async (request: FastifyRequest) => {
     request.startTime = Date.now();
+
+    return Promise.resolve();
   });
 
-  fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
-    const route = request.routerPath || request.url;
+  void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
+    const route = request.routerPath ?? request.url;
 
     // Skip excluded routes
-    if (config.excludeRoutes?.some(excludedRoute => route.includes(excludedRoute))) {
+    if (
+      config.excludeRoutes &&
+      config.excludeRoutes.length > 0 &&
+      config.excludeRoutes.some(excludedRoute => route.includes(excludedRoute))
+    ) {
       return;
     }
 
     // Skip if only specific routes are included and this route is not included
     if (
       config.includeRoutes &&
+      config.includeRoutes.length > 0 &&
       !config.includeRoutes.some(includedRoute => route.includes(includedRoute))
     ) {
       return;
     }
 
-    const duration = request.startTime ? Date.now() - request.startTime : 0;
+    const duration = typeof request.startTime === 'number' ? Date.now() - request.startTime : 0;
     const labels = {
       method: request.method,
       route,
@@ -143,11 +156,12 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     // Record HTTP metrics
     const contentLength = reply.getHeader('content-length');
-    const responseSize = typeof contentLength === 'string' 
-      ? parseInt(contentLength, 10) 
-      : typeof contentLength === 'number' 
-        ? contentLength 
-        : undefined;
+    const responseSize =
+      typeof contentLength === 'string'
+        ? parseInt(contentLength, 10)
+        : typeof contentLength === 'number'
+          ? contentLength
+          : undefined;
 
     const metricsData: HttpRequestMetrics = {
       method: request.method,
@@ -161,12 +175,9 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
       metricsData.responseSize = responseSize;
     }
 
-    recordHttpMetrics(
-      metricsData,
-      config.httpMetrics!,
-      metrics,
-      awsExporter
-    );
+    if (config.httpMetrics) {
+      recordHttpMetrics(metricsData, config.httpMetrics, metrics, awsExporter);
+    }
   });
 
   // Add plugin context methods
@@ -181,14 +192,14 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
       const metric = metrics.get(name) as Counter;
-      if (metric) {
-        if (labels) {
+      if (metric !== undefined) {
+        if (labels && Object.keys(labels).length > 0) {
           metric.inc(labels, value);
         } else {
           metric.inc(value);
         }
 
-        if (awsExporter) {
+        if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
@@ -196,14 +207,14 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     setGauge(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Gauge;
-      if (metric) {
-        if (labels) {
+      if (metric !== undefined) {
+        if (labels && Object.keys(labels).length > 0) {
           metric.set(labels, value);
         } else {
           metric.set(value);
         }
 
-        if (awsExporter) {
+        if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
@@ -211,14 +222,14 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     observeHistogram(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Histogram;
-      if (metric) {
-        if (labels) {
+      if (metric !== undefined) {
+        if (labels && Object.keys(labels).length > 0) {
           metric.observe(labels, value);
         } else {
           metric.observe(value);
         }
 
-        if (awsExporter) {
+        if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
@@ -226,21 +237,23 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     observeSummary(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Summary;
-      if (metric) {
-        if (labels) {
+      if (metric !== undefined) {
+        if (labels && Object.keys(labels).length > 0) {
           metric.observe(labels, value);
         } else {
           metric.observe(value);
         }
 
-        if (awsExporter) {
+        if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
         }
       }
     },
 
     recordHttpRequest(httpMetrics: HttpRequestMetrics): void {
-      recordHttpMetrics(httpMetrics, config.httpMetrics!, metrics, awsExporter);
+      if (config.httpMetrics) {
+        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter);
+      }
     },
   };
 
@@ -248,12 +261,15 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   fastify.decorate('prometheus', context);
 
   // Cleanup on close
-  fastify.addHook('onClose', async () => {
+  void fastify.addHook('onClose', async () => {
     if (awsExporter) {
       await awsExporter.flush();
       awsExporter.stop();
     }
   });
+
+  // Wait for plugin initialization to complete
+  await Promise.resolve();
 };
 
 /**
@@ -264,56 +280,86 @@ function initializeHttpMetrics(
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
   registry: typeof register
 ): void {
-  if (config.requestDuration?.enabled) {
+  if (
+    config.requestDuration?.enabled === true &&
+    typeof config.requestDuration.name === 'string' &&
+    config.requestDuration.name.length > 0 &&
+    typeof config.requestDuration.help === 'string' &&
+    config.requestDuration.help.length > 0
+  ) {
     const metric = new Histogram({
-      name: config.requestDuration.name!,
-      help: config.requestDuration.help!,
-      labelNames: config.requestDuration.labels!,
-      buckets: config.requestDuration.buckets!,
+      name: config.requestDuration.name,
+      help: config.requestDuration.help,
+      labelNames: config.requestDuration.labels ?? [],
+      buckets: config.requestDuration.buckets ?? [0.1, 0.5, 1, 2, 5, 10],
       registers: [registry],
     });
-    metrics.set(config.requestDuration.name!, metric);
+    metrics.set(config.requestDuration.name, metric);
   }
 
-  if (config.requestCount?.enabled) {
+  if (
+    config.requestCount?.enabled === true &&
+    typeof config.requestCount.name === 'string' &&
+    config.requestCount.name.length > 0 &&
+    typeof config.requestCount.help === 'string' &&
+    config.requestCount.help.length > 0
+  ) {
     const metric = new Counter({
-      name: config.requestCount.name!,
-      help: config.requestCount.help!,
-      labelNames: config.requestCount.labels!,
+      name: config.requestCount.name,
+      help: config.requestCount.help,
+      labelNames: config.requestCount.labels ?? [],
       registers: [registry],
     });
-    metrics.set(config.requestCount.name!, metric);
+    metrics.set(config.requestCount.name, metric);
   }
 
-  if (config.responseSize?.enabled) {
+  if (
+    config.responseSize?.enabled === true &&
+    typeof config.responseSize.name === 'string' &&
+    config.responseSize.name.length > 0 &&
+    typeof config.responseSize.help === 'string' &&
+    config.responseSize.help.length > 0
+  ) {
     const metric = new Histogram({
-      name: config.responseSize.name!,
-      help: config.responseSize.help!,
-      labelNames: config.responseSize.labels!,
-      buckets: config.responseSize.buckets!,
+      name: config.responseSize.name,
+      help: config.responseSize.help,
+      labelNames: config.responseSize.labels ?? [],
+      buckets: config.responseSize.buckets ?? [10, 100, 1000, 10000, 100000],
       registers: [registry],
     });
-    metrics.set(config.responseSize.name!, metric);
+    metrics.set(config.responseSize.name, metric);
   }
 
-  if (config.errorCount?.enabled) {
+  if (
+    config.errorCount?.enabled === true &&
+    typeof config.errorCount.name === 'string' &&
+    config.errorCount.name.length > 0 &&
+    typeof config.errorCount.help === 'string' &&
+    config.errorCount.help.length > 0
+  ) {
     const metric = new Counter({
-      name: config.errorCount.name!,
-      help: config.errorCount.help!,
-      labelNames: config.errorCount.labels!,
+      name: config.errorCount.name,
+      help: config.errorCount.help,
+      labelNames: config.errorCount.labels ?? [],
       registers: [registry],
     });
-    metrics.set(config.errorCount.name!, metric);
+    metrics.set(config.errorCount.name, metric);
   }
 
-  if (config.successCount?.enabled) {
+  if (
+    config.successCount?.enabled === true &&
+    typeof config.successCount.name === 'string' &&
+    config.successCount.name.length > 0 &&
+    typeof config.successCount.help === 'string' &&
+    config.successCount.help.length > 0
+  ) {
     const metric = new Counter({
-      name: config.successCount.name!,
-      help: config.successCount.help!,
-      labelNames: config.successCount.labels!,
+      name: config.successCount.name,
+      help: config.successCount.help,
+      labelNames: config.successCount.labels ?? [],
       registers: [registry],
     });
-    metrics.set(config.successCount.name!, metric);
+    metrics.set(config.successCount.name, metric);
   }
 }
 
@@ -331,12 +377,18 @@ function initializeCustomMetrics(
     switch (metricDef.type) {
       case 'counter':
         {
-          const config: any = {
+          interface CounterConfig {
+            name: string;
+            help: string;
+            registers: (typeof register)[];
+            labelNames?: string[];
+          }
+          const config: CounterConfig = {
             name: metricDef.name,
             help: metricDef.help,
             registers: [registry],
           };
-          if (metricDef.labels) {
+          if (metricDef.labels && metricDef.labels.length > 0) {
             config.labelNames = metricDef.labels;
           }
           metric = new Counter(config);
@@ -345,12 +397,18 @@ function initializeCustomMetrics(
 
       case 'gauge':
         {
-          const config: any = {
+          interface GaugeConfig {
+            name: string;
+            help: string;
+            registers: (typeof register)[];
+            labelNames?: string[];
+          }
+          const config: GaugeConfig = {
             name: metricDef.name,
             help: metricDef.help,
             registers: [registry],
           };
-          if (metricDef.labels) {
+          if (metricDef.labels && metricDef.labels.length > 0) {
             config.labelNames = metricDef.labels;
           }
           metric = new Gauge(config);
@@ -359,15 +417,22 @@ function initializeCustomMetrics(
 
       case 'histogram':
         {
-          const config: any = {
+          interface HistogramConfig {
+            name: string;
+            help: string;
+            registers: (typeof register)[];
+            labelNames?: string[];
+            buckets?: number[];
+          }
+          const config: HistogramConfig = {
             name: metricDef.name,
             help: metricDef.help,
             registers: [registry],
           };
-          if (metricDef.labels) {
+          if (metricDef.labels && metricDef.labels.length > 0) {
             config.labelNames = metricDef.labels;
           }
-          if (metricDef.config?.buckets) {
+          if (metricDef.config?.buckets && metricDef.config.buckets.length > 0) {
             config.buckets = metricDef.config.buckets;
           }
           metric = new Histogram(config);
@@ -376,21 +441,33 @@ function initializeCustomMetrics(
 
       case 'summary':
         {
-          const config: any = {
+          interface SummaryConfig {
+            name: string;
+            help: string;
+            registers: (typeof register)[];
+            labelNames?: string[];
+            percentiles?: number[];
+            maxAgeSeconds?: number;
+            ageBuckets?: number;
+          }
+          const config: SummaryConfig = {
             name: metricDef.name,
             help: metricDef.help,
             registers: [registry],
           };
-          if (metricDef.labels) {
+          if (metricDef.labels && metricDef.labels.length > 0) {
             config.labelNames = metricDef.labels;
           }
-          if (metricDef.config?.percentiles) {
+          if (metricDef.config?.percentiles && metricDef.config.percentiles.length > 0) {
             config.percentiles = metricDef.config.percentiles;
           }
-          if (metricDef.config?.maxAgeSeconds) {
+          if (
+            typeof metricDef.config?.maxAgeSeconds === 'number' &&
+            metricDef.config.maxAgeSeconds > 0
+          ) {
             config.maxAgeSeconds = metricDef.config.maxAgeSeconds;
           }
-          if (metricDef.config?.ageBuckets) {
+          if (typeof metricDef.config?.ageBuckets === 'number' && metricDef.config.ageBuckets > 0) {
             config.ageBuckets = metricDef.config.ageBuckets;
           }
           metric = new Summary(config);
@@ -418,10 +495,14 @@ function recordHttpMetrics(
   const isSuccess = requestMetrics.statusCode >= 200 && requestMetrics.statusCode < 400;
 
   // Record request duration
-  if (config.requestDuration?.enabled) {
-    const metric = metrics.get(config.requestDuration.name!) as Histogram;
-    if (metric) {
-      if (requestMetrics.labels) {
+  if (
+    config.requestDuration?.enabled === true &&
+    typeof config.requestDuration.name === 'string' &&
+    config.requestDuration.name.length > 0
+  ) {
+    const metric = metrics.get(config.requestDuration.name) as Histogram;
+    if (metric !== undefined) {
+      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
         metric.observe(requestMetrics.labels, requestMetrics.duration);
       } else {
         metric.observe(requestMetrics.duration);
@@ -430,10 +511,14 @@ function recordHttpMetrics(
   }
 
   // Record request count
-  if (config.requestCount?.enabled) {
-    const metric = metrics.get(config.requestCount.name!) as Counter;
-    if (metric) {
-      if (requestMetrics.labels) {
+  if (
+    config.requestCount?.enabled === true &&
+    typeof config.requestCount.name === 'string' &&
+    config.requestCount.name.length > 0
+  ) {
+    const metric = metrics.get(config.requestCount.name) as Counter;
+    if (metric !== undefined) {
+      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
         metric.inc(requestMetrics.labels);
       } else {
         metric.inc();
@@ -442,10 +527,16 @@ function recordHttpMetrics(
   }
 
   // Record response size
-  if (config.responseSize?.enabled && requestMetrics.responseSize) {
-    const metric = metrics.get(config.responseSize.name!) as Histogram;
-    if (metric) {
-      if (requestMetrics.labels) {
+  if (
+    config.responseSize?.enabled === true &&
+    typeof config.responseSize.name === 'string' &&
+    config.responseSize.name.length > 0 &&
+    typeof requestMetrics.responseSize === 'number' &&
+    requestMetrics.responseSize > 0
+  ) {
+    const metric = metrics.get(config.responseSize.name) as Histogram;
+    if (metric !== undefined) {
+      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
         metric.observe(requestMetrics.labels, requestMetrics.responseSize);
       } else {
         metric.observe(requestMetrics.responseSize);
@@ -454,10 +545,15 @@ function recordHttpMetrics(
   }
 
   // Record error count
-  if (config.errorCount?.enabled && isError) {
-    const metric = metrics.get(config.errorCount.name!) as Counter;
-    if (metric) {
-      if (requestMetrics.labels) {
+  if (
+    config.errorCount?.enabled === true &&
+    typeof config.errorCount.name === 'string' &&
+    config.errorCount.name.length > 0 &&
+    isError
+  ) {
+    const metric = metrics.get(config.errorCount.name) as Counter;
+    if (metric !== undefined) {
+      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
         metric.inc(requestMetrics.labels);
       } else {
         metric.inc();
@@ -466,10 +562,15 @@ function recordHttpMetrics(
   }
 
   // Record success count
-  if (config.successCount?.enabled && isSuccess) {
-    const metric = metrics.get(config.successCount.name!) as Counter;
-    if (metric) {
-      if (requestMetrics.labels) {
+  if (
+    config.successCount?.enabled === true &&
+    typeof config.successCount.name === 'string' &&
+    config.successCount.name.length > 0 &&
+    isSuccess
+  ) {
+    const metric = metrics.get(config.successCount.name) as Counter;
+    if (metric !== undefined) {
+      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
         metric.inc(requestMetrics.labels);
       } else {
         metric.inc();
@@ -478,33 +579,57 @@ function recordHttpMetrics(
   }
 
   // Export to AWS CloudWatch
-  if (awsExporter) {
-    if (config.requestDuration?.enabled) {
+  if (awsExporter !== undefined) {
+    if (
+      config.requestDuration?.enabled === true &&
+      typeof config.requestDuration.name === 'string' &&
+      config.requestDuration.name.length > 0
+    ) {
       awsExporter.exportMetric(
-        config.requestDuration.name!,
+        config.requestDuration.name,
         requestMetrics.duration,
         requestMetrics.labels
       );
     }
 
-    if (config.requestCount?.enabled) {
-      awsExporter.exportMetric(config.requestCount.name!, 1, requestMetrics.labels);
+    if (
+      config.requestCount?.enabled === true &&
+      typeof config.requestCount.name === 'string' &&
+      config.requestCount.name.length > 0
+    ) {
+      awsExporter.exportMetric(config.requestCount.name, 1, requestMetrics.labels);
     }
 
-    if (config.responseSize?.enabled && requestMetrics.responseSize) {
+    if (
+      config.responseSize?.enabled === true &&
+      typeof config.responseSize.name === 'string' &&
+      config.responseSize.name.length > 0 &&
+      typeof requestMetrics.responseSize === 'number' &&
+      requestMetrics.responseSize > 0
+    ) {
       awsExporter.exportMetric(
-        config.responseSize.name!,
+        config.responseSize.name,
         requestMetrics.responseSize,
         requestMetrics.labels
       );
     }
 
-    if (config.errorCount?.enabled && isError) {
-      awsExporter.exportMetric(config.errorCount.name!, 1, requestMetrics.labels);
+    if (
+      config.errorCount?.enabled === true &&
+      typeof config.errorCount.name === 'string' &&
+      config.errorCount.name.length > 0 &&
+      isError
+    ) {
+      awsExporter.exportMetric(config.errorCount.name, 1, requestMetrics.labels);
     }
 
-    if (config.successCount?.enabled && isSuccess) {
-      awsExporter.exportMetric(config.successCount.name!, 1, requestMetrics.labels);
+    if (
+      config.successCount?.enabled === true &&
+      typeof config.successCount.name === 'string' &&
+      config.successCount.name.length > 0 &&
+      isSuccess
+    ) {
+      awsExporter.exportMetric(config.successCount.name, 1, requestMetrics.labels);
     }
   }
 }
