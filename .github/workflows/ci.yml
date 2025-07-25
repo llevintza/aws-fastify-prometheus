@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Enable Corepack
+      run: corepack enable
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'yarn'
+    
+    - name: Install dependencies
+      run: yarn install --immutable
+    
+    - name: Run linter
+      run: yarn lint
+    
+    - name: Check formatting
+      run: yarn format:check
+
+  test:
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        node-version: [20, 22]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Enable Corepack
+      run: corepack enable
+    
+    - name: Use Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+        cache: 'yarn'
+    
+    - name: Install dependencies
+      run: yarn install --immutable
+    
+    - name: Run tests
+      run: yarn test
+    
+    - name: Upload coverage to Codecov
+      if: matrix.node-version == 22
+      uses: codecov/codecov-action@v3
+
+  build:
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Enable Corepack
+      run: corepack enable
+    
+    - name: Use Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'yarn'
+    
+    - name: Install dependencies
+      run: yarn install --immutable
+    
+    - name: Build
+      run: yarn build
