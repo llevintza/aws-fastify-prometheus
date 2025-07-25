@@ -1,3 +1,10 @@
+## [1.0.0-alpha.3](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2025-07-25)
+
+
+### Bug Fixes
+
+* update GitHub Actions permissions and use GITHUB_TOKEN for package publishing ([7a2bcc7](https://github.com/llevintza/aws-fastify-prometheus/commit/7a2bcc7fc00cbd8a5b5604fc539b25454251db49))
+
 ## [1.0.0-alpha.2](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2025-07-25)
 
 
