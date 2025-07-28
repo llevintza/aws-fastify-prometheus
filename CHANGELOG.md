@@ -1,3 +1,10 @@
+## [1.0.0-alpha.5](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.4...v1.0.0-alpha.5) (2025-07-28)
+
+
+### Bug Fixes
+
+* update CI workflow to use classic PAT for npm publishing ([3fc4875](https://github.com/llevintza/aws-fastify-prometheus/commit/3fc4875bd231722c65cbd9a20ba7312b37c730a4))
+
 ## [1.0.0-alpha.4](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.3...v1.0.0-alpha.4) (2025-07-25)
 
 
