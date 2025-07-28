@@ -1,3 +1,11 @@
+## 1.0.0-rc.1 (2025-07-28)
+
+
+### Features
+
+* add hotfix and release branch configurations to .releaserc.js ([9c5c4bb](https://github.com/llevintza/aws-fastify-prometheus/commit/9c5c4bb1d1e59bf37bf1d254961d8afe56e17b7c))
+* update release branch configurations in .releaserc.js ([8238792](https://github.com/llevintza/aws-fastify-prometheus/commit/82387928b11847792c62ddc895e7807e0d294c57))
+
 ## [1.0.0-alpha.8](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.7...v1.0.0-alpha.8) (2025-07-28)
 
 
