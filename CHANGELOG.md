@@ -1,3 +1,11 @@
+## [1.0.0-alpha.7](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.6...v1.0.0-alpha.7) (2025-07-28)
+
+
+### Bug Fixes
+
+* update package scope from [@xoon](https://github.com/xoon) to [@llevintza](https://github.com/llevintza) and adjust related configurations ([1124219](https://github.com/llevintza/aws-fastify-prometheus/commit/112421971860a0dbaf67c3668e92b6495ede38da))
+* update package scope from [@xoon](https://github.com/xoon) to [@llevintza](https://github.com/llevintza) in yarn.lock and add fastify-prometheus-metrics dependencies ([cdad31d](https://github.com/llevintza/aws-fastify-prometheus/commit/cdad31d10e8e5204fa6bed718211a8cb642e3015))
+
 ## [1.0.0-alpha.4](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.3...v1.0.0-alpha.4) (2025-07-25)
 
 
