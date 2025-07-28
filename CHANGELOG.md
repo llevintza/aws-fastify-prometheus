@@ -1,3 +1,40 @@
+## [1.0.0-alpha.8](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.7...v1.0.0-alpha.8) (2025-07-28)
+
+
+### Features
+
+* trigger CI pipeline to test updated package scope and GitHub PAT configuration ([2a7c87e](https://github.com/llevintza/aws-fastify-prometheus/commit/2a7c87e6426288e6a03d139f9469fb70190e9d98))
+* trigger CI pipeline to test updated package scope and GitHub PAT configuration ([c3e3f56](https://github.com/llevintza/aws-fastify-prometheus/commit/c3e3f56a7f798865910ea48d2eabaf020f34ff77))
+
+## [1.0.0-alpha.7](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.6...v1.0.0-alpha.7) (2025-07-28)
+
+
+### Bug Fixes
+
+* update package scope from [@xoon](https://github.com/xoon) to [@llevintza](https://github.com/llevintza) and adjust related configurations ([1124219](https://github.com/llevintza/aws-fastify-prometheus/commit/112421971860a0dbaf67c3668e92b6495ede38da))
+* update package scope from [@xoon](https://github.com/xoon) to [@llevintza](https://github.com/llevintza) in yarn.lock and add fastify-prometheus-metrics dependencies ([cdad31d](https://github.com/llevintza/aws-fastify-prometheus/commit/cdad31d10e8e5204fa6bed718211a8cb642e3015))
+
+## [1.0.0-alpha.4](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.3...v1.0.0-alpha.4) (2025-07-25)
+
+
+### Bug Fixes
+
+* update GitHub Actions to use GH_TOKEN instead of GITHUB_TOKEN ([e242c0a](https://github.com/llevintza/aws-fastify-prometheus/commit/e242c0a0d4184c72efe05a1dfbb4d879750e9932))
+
+## [1.0.0-alpha.3](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2025-07-25)
+
+
+### Bug Fixes
+
+* update GitHub Actions permissions and use GITHUB_TOKEN for package publishing ([7a2bcc7](https://github.com/llevintza/aws-fastify-prometheus/commit/7a2bcc7fc00cbd8a5b5604fc539b25454251db49))
+
+## [1.0.0-alpha.2](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2025-07-25)
+
+
+### Features
+
+* trigger initial alpha release for GitHub Packages publishing ([b32b221](https://github.com/llevintza/aws-fastify-prometheus/commit/b32b2216233e982df783e174cba71ae6a048b854))
+
 ## 1.0.0-alpha.1 (2025-07-25)
 
 
