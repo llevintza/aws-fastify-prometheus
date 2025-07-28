@@ -2,8 +2,12 @@ module.exports = {
   branches: [
     'main',
     {
-      name: 'release/*',
+      name: 'release/rc_1',
       prerelease: 'beta',
+    },
+    {
+      name: 'release/v0.0.1',
+      prerelease: 'rc',
     },
     {
       name: 'feature/*',
@@ -11,7 +15,7 @@ module.exports = {
     },
     {
       name: 'hotfix/*',
-      prerelease: 'rc',
+      prerelease: 'hotfix',
     },
     {
       name: 'next',
@@ -26,11 +30,6 @@ module.exports = {
       name: 'stable',
       channel: 'stable',
       prerelease: false,
-    },
-    { 
-      name: 'next',
-      channel: 'next',
-      prerelease: true,
     },
   ],
   plugins: [
