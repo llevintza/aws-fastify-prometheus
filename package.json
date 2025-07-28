@@ -1,6 +1,6 @@
 {
-  "name": "@xoon/fastify-prometheus-metrics",
-  "version": "1.0.0-alpha.6",
+  "name": "@llevintza/fastify-prometheus-metrics",
+  "version": "1.0.0-alpha.4",
   "description": "A comprehensive Fastify plugin for Prometheus metrics collection with AWS CloudWatch integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

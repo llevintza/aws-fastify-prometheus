@@ -2,7 +2,7 @@
 
 A comprehensive Fastify plugin for collecting and exporting Prometheus metrics with optional AWS CloudWatch integration.
 
-[![npm version](https://badge.fury.io/js/@xoon/fastify-prometheus-metrics.svg)](https://badge.fury.io/js/@xoon/fastify-prometheus-metrics)
+[![npm version](https://badge.fury.io/js/@llevintza/fastify-prometheus-metrics.svg)](https://badge.fury.io/js/@llevintza/fastify-prometheus-metrics)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
 
@@ -21,19 +21,19 @@ A comprehensive Fastify plugin for collecting and exporting Prometheus metrics w
 
 ```bash
 # Install the latest stable version
-npm install @xoon/fastify-prometheus-metrics
+npm install @llevintza/fastify-prometheus-metrics
 
 # Install a specific prerelease version
-npm install @xoon/fastify-prometheus-metrics@0.0.1-alpha
+npm install @llevintza/fastify-prometheus-metrics@0.0.1-alpha
 
 # Or with other package managers
-yarn add @xoon/fastify-prometheus-metrics
-pnpm add @xoon/fastify-prometheus-metrics
+yarn add @llevintza/fastify-prometheus-metrics
+pnpm add @llevintza/fastify-prometheus-metrics
 ```
 
-> **Note**: This package is published to GitHub Packages. You'll need to configure npm to use GitHub Packages for the `@xoon` scope:
+> **Note**: This package is published to GitHub Packages. You'll need to configure npm to use GitHub Packages for the `@llevintza` scope:
 > ```bash
-> echo "@xoon:registry=https://npm.pkg.github.com" >> ~/.npmrc
+> echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
 > ```
 
 > **Prerelease Versions**: This package follows semantic versioning with prerelease support:
@@ -51,7 +51,7 @@ pnpm add @xoon/fastify-prometheus-metrics
 
 ```typescript
 import Fastify from 'fastify';
-import fastifyPrometheusPlugin from '@xoon/fastify-prometheus-metrics';
+import fastifyPrometheusPlugin from '@llevintza/fastify-prometheus-metrics';
 
 const fastify = Fastify();
 
@@ -73,7 +73,7 @@ await fastify.listen({ port: 3000 });
 
 ```typescript
 import Fastify from 'fastify';
-import fastifyPrometheusPlugin from '@xoon/fastify-prometheus-metrics';
+import fastifyPrometheusPlugin from '@llevintza/fastify-prometheus-metrics';
 
 const fastify = Fastify();
 
@@ -307,7 +307,7 @@ import fastifyPrometheusPlugin, {
   FastifyPrometheusOptions,
   FastifyPrometheusContext,
   MetricLabels,
-} from '@xoon/fastify-prometheus-metrics';
+} from '@llevintza/fastify-prometheus-metrics';
 
 // Type-safe configuration
 const config: FastifyPrometheusOptions = {
