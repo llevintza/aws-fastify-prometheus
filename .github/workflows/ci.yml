@@ -7,10 +7,11 @@ on:
     branches: [ main, 'release/*' ]
 
 permissions:
-  contents: write  # Need write to create releases and update files
-  packages: write  # Need write to publish packages
-  pull-requests: read
-  actions: read    # Need read for workflow access
+  contents: write     # Create releases and update files
+  packages: write     # Publish to GitHub Packages  
+  pull-requests: read # Read PRs
+  actions: read       # Workflow access
+  id-token: write     # For OIDC authentication
 
 jobs:
   lint:
@@ -110,6 +111,11 @@ jobs:
         registry-url: 'https://npm.pkg.github.com'
         scope: '@xoon'
     
+    - name: Authenticate with GitHub Packages
+      run: |
+        echo "@xoon:registry=https://npm.pkg.github.com" >> ~/.npmrc
+        echo "//npm.pkg.github.com/:_authToken=${{ secrets.NPM_PUBLISH_TOKEN }}" >> ~/.npmrc
+        
     - name: Install dependencies
       run: yarn install --immutable
     
