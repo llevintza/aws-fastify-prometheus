@@ -9,6 +9,29 @@ module.exports = {
       name: 'feature/*',
       prerelease: 'alpha',
     },
+    {
+      name: 'hotfix/*',
+      prerelease: 'rc',
+    },
+    {
+      name: 'next',
+      prerelease: 'next',
+    },
+    { 
+      name: 'latest',
+      channel: 'latest',
+      prerelease: false,
+    },
+    { 
+      name: 'stable',
+      channel: 'stable',
+      prerelease: false,
+    },
+    { 
+      name: 'next',
+      channel: 'next',
+      prerelease: true,
+    },
   ],
   plugins: [
     '@semantic-release/commit-analyzer',
