@@ -1,3 +1,11 @@
+## [1.0.0-alpha.8](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.7...v1.0.0-alpha.8) (2025-07-28)
+
+
+### Features
+
+* trigger CI pipeline to test updated package scope and GitHub PAT configuration ([2a7c87e](https://github.com/llevintza/aws-fastify-prometheus/commit/2a7c87e6426288e6a03d139f9469fb70190e9d98))
+* trigger CI pipeline to test updated package scope and GitHub PAT configuration ([c3e3f56](https://github.com/llevintza/aws-fastify-prometheus/commit/c3e3f56a7f798865910ea48d2eabaf020f34ff77))
+
 ## [1.0.0-alpha.7](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.6...v1.0.0-alpha.7) (2025-07-28)
 
 
