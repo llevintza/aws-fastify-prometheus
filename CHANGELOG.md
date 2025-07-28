@@ -1,3 +1,10 @@
+## [1.0.0-alpha.4](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.3...v1.0.0-alpha.4) (2025-07-25)
+
+
+### Bug Fixes
+
+* update GitHub Actions to use GH_TOKEN instead of GITHUB_TOKEN ([e242c0a](https://github.com/llevintza/aws-fastify-prometheus/commit/e242c0a0d4184c72efe05a1dfbb4d879750e9932))
+
 ## [1.0.0-alpha.3](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2025-07-25)
 
 
