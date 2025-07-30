@@ -1,11 +1,12 @@
 # Development Guide
 
-This document provides information for developers who want to contribute to or work with the `@xoon/fastify-prometheus-metrics` plugin.
+This document provides information for developers who want to contribute to or work with the `@llevintza/fastify-prometheus-metrics` plugin.
 
 ## Prerequisites
 
 - **Node.js**: Version 20.0.0 or higher (latest LTS recommended)
 - **Yarn**: Version 4.6.0 (managed via Corepack)
+- **Git**: For version control and contributing
 
 ## Package Manager
 
@@ -41,13 +42,40 @@ Users can install and use this package with their preferred package manager:
 
 ```bash
 # npm
-npm install fastify-prometheus-metrics
+npm install @llevintza/fastify-prometheus-metrics
 
 # yarn
-yarn add fastify-prometheus-metrics
+yarn add @llevintza/fastify-prometheus-metrics
 
 # pnpm
-pnpm add fastify-prometheus-metrics
+pnpm add @llevintza/fastify-prometheus-metrics
+```
+
+## GitHub Packages Setup
+
+This package is published to GitHub Packages. To install it, you need to configure your package manager:
+
+### npm Configuration
+```bash
+# Option 1: Global configuration
+echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# Option 2: Project-specific .npmrc
+cat > .npmrc << EOF
+@llevintza:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=\${NODE_AUTH_TOKEN}
+EOF
+```
+
+### Yarn Configuration
+```bash
+# Add to .yarnrc.yml
+cat >> .yarnrc.yml << EOF
+npmScopes:
+  llevintza:
+    npmRegistryServer: "https://npm.pkg.github.com"
+    npmAuthToken: "\${NODE_AUTH_TOKEN}"
+EOF
 ```
 
 ## Project Structure
@@ -72,8 +100,8 @@ pnpm add fastify-prometheus-metrics
 ### 1. Setup
 
 ```bash
-git clone https://github.com/llevintza/aws-node-prometheus.git
-cd aws-node-prometheus
+git clone https://github.com/llevintza/aws-fastify-prometheus.git
+cd aws-fastify-prometheus
 yarn install
 ```
 

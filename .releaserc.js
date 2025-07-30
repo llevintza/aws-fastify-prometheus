@@ -2,34 +2,12 @@ module.exports = {
   branches: [
     'main',
     {
-      name: 'release/rc_1',
+      name: 'release/*',
       prerelease: 'beta',
-    },
-    {
-      name: 'release/v0.0.1',
-      prerelease: 'rc',
     },
     {
       name: 'feature/*',
       prerelease: 'alpha',
-    },
-    {
-      name: 'hotfix/*',
-      prerelease: 'hotfix',
-    },
-    {
-      name: 'next',
-      prerelease: 'next',
-    },
-    { 
-      name: 'latest',
-      channel: 'latest',
-      prerelease: false,
-    },
-    { 
-      name: 'stable',
-      channel: 'stable',
-      prerelease: false,
     },
   ],
   plugins: [
@@ -54,9 +32,31 @@ module.exports = {
   ],
   preset: 'conventionalcommits',
   releaseRules: [
+    // Major version bumps
+    { type: 'feat', breaking: true, release: 'major' },
+    { type: 'fix', breaking: true, release: 'major' },
+    { type: 'perf', breaking: true, release: 'major' },
+    { type: 'refactor', breaking: true, release: 'major' },
+    
+    // Minor version bumps
+    { type: 'feat', release: 'minor' },
+    { type: 'perf', release: 'minor' },
+    
+    // Patch version bumps
+    { type: 'fix', release: 'patch' },
     { type: 'docs', scope: 'README', release: 'patch' },
     { type: 'refactor', release: 'patch' },
     { type: 'style', release: 'patch' },
+    { type: 'perf', release: 'patch' },
+    { type: 'build', release: 'patch' },
+    { type: 'revert', release: 'patch' },
+    
+    // Manual version control
+    { scope: 'major', release: 'major' },
+    { scope: 'minor', release: 'minor' },
+    { scope: 'patch', release: 'patch' },
+    
+    // No release
     { type: 'chore', release: false },
     { type: 'test', release: false },
     { type: 'ci', release: false },

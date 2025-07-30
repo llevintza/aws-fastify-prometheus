@@ -1,6 +1,6 @@
-# Contributing to @xoon/fastify-prometheus-metrics
+# Contributing to @llevintza/fastify-prometheus-metrics
 
-Thank you for your interest in contributing to `@xoon/fastify-prometheus-metrics`! We welcome contributions from everyone and have established a streamlined process to make contributing as easy as possible.
+Thank you for your interest in contributing to `@llevintza/fastify-prometheus-metrics`! We welcome contributions from everyone and have established a streamlined process to make contributing as easy as possible.
 
 ## Code of Conduct
 
@@ -25,7 +25,7 @@ Enhancement suggestions are tracked as GitHub issues. When creating an enhanceme
 
 ### Pull Requests
 
-We follow a **trunk-based development** model. Please read our [Branching Strategy](./docs/BRANCHING_STRATEGY.md) for detailed information.
+We follow a **trunk-based development** model with automated releases. Please read our [Branching Strategy](./docs/BRANCHING_STRATEGY.md) for detailed information.
 
 **Quick Overview:**
 1. Fork the repo and create a feature branch from `main`: `feature/your-feature-name`
@@ -33,6 +33,25 @@ We follow a **trunk-based development** model. Please read our [Branching Strate
 3. Test your changes with the automatically generated alpha releases
 4. Create a pull request to merge back to `main`
 5. After review and approval, your changes will be included in the next stable release
+
+## Release Strategy Overview
+
+Our simplified 3-branch workflow automatically handles versioning:
+
+| Branch Pattern | Release Type | Example | Purpose |
+|----------------|--------------|---------|---------|
+| `main` | **Stable** | `1.0.0` | Production releases |
+| `release/*` | **Beta** | `1.1.0-beta.1` | Pre-release testing |
+| `feature/*` | **Alpha** | `1.1.0-alpha.2` | Feature development |
+
+**Automatic Alpha Testing**: Every push to a feature branch creates an alpha release for testing:
+```bash
+# Your feature branch
+git push origin feature/new-metrics
+
+# Automatically creates: 1.0.0-alpha.1, 1.0.0-alpha.2, etc.
+# Test with: npm install @llevintza/fastify-prometheus-metrics@alpha
+```
 
 ## Development Setup
 
@@ -104,7 +123,7 @@ We follow a **trunk-based development** approach with automated releases. For co
 3. **Test Alpha Release**:
    - Pushing to your feature branch automatically creates an alpha release (e.g., `1.0.0-alpha.1`)
    - Test the alpha release to ensure your changes work correctly
-   - Install with: `npm install @xoon/fastify-prometheus-metrics@alpha`
+   - Install with: `npm install @llevintza/fastify-prometheus-metrics@alpha`
 
 4. **Create Pull Request**:
    - Create PR from your feature branch to `main`
@@ -113,7 +132,7 @@ We follow a **trunk-based development** approach with automated releases. For co
 
 ### Commit Message Format
 
-We use [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning:
+We use [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning and changelog generation:
 
 ```
 <type>[optional scope]: <description>
@@ -123,12 +142,53 @@ We use [Conventional Commits](https://www.conventionalcommits.org/) for automate
 [optional footer(s)]
 ```
 
-**Common Types:**
-- `feat:` - New feature (minor version bump)
-- `fix:` - Bug fix (patch version bump)
-- `docs:` - Documentation changes (patch version bump)
-- `refactor:` - Code refactoring (patch version bump)
-- `test:` - Test changes (no release)
+**Commit Types and Version Impact:**
+- `feat:` - New feature → **Minor version bump** (1.0.0 → 1.1.0)
+- `fix:` - Bug fix → **Patch version bump** (1.0.0 → 1.0.1)
+- `docs:` - Documentation changes → **Patch version bump**
+- `refactor:` - Code refactoring → **Patch version bump**
+- `perf:` - Performance improvements → **Patch version bump**
+- `test:` - Test changes → **No release**
+- `chore:` - Build/maintenance tasks → **No release**
+- `ci:` - CI/CD changes → **No release**
+
+**Breaking Changes:**
+- Add `!` after type: `feat!:` or `fix!:`
+- Add `BREAKING CHANGE:` in footer
+- Results in **Major version bump** (1.0.0 → 2.0.0)
+
+**Examples:**
+```bash
+# Feature addition (minor version bump)
+git commit -m "feat: add custom metric labels support"
+
+# Bug fix (patch version bump)
+git commit -m "fix: resolve memory leak in metric collection"
+
+# Breaking change (major version bump)
+git commit -m "feat!: change plugin configuration structure
+
+BREAKING CHANGE: The options.metrics property has been renamed to options.customMetrics."
+
+# Documentation (patch version bump)
+git commit -m "docs: update installation instructions"
+
+# No release
+git commit -m "test: add unit tests for new metrics"
+git commit -m "chore: update development dependencies"
+```
+
+**Advanced Version Control:**
+```bash
+# Skip release entirely
+git commit -m "docs: fix typo [skip release]"
+
+# Multiple commits in one release
+git commit -m "feat: add new metric type"
+git commit -m "fix: resolve edge case in collection"
+git commit -m "docs: update API documentation"
+# When merged to main → single release with all changes
+```
 - `chore:` - Maintenance tasks (no release)
 
 **Breaking Changes:**

@@ -20,30 +20,58 @@ A comprehensive Fastify plugin for collecting and exporting Prometheus metrics w
 ## Installation
 
 ```bash
-# Install the latest stable version
+# Install the latest stable version (recommended for production)
 npm install @llevintza/fastify-prometheus-metrics
 
-# Install a specific prerelease version
-npm install @llevintza/fastify-prometheus-metrics@0.0.1-alpha
+# Install beta version (for testing upcoming features)
+npm install @llevintza/fastify-prometheus-metrics@beta
+
+# Install alpha version (for testing cutting-edge features)
+npm install @llevintza/fastify-prometheus-metrics@alpha
 
 # Or with other package managers
 yarn add @llevintza/fastify-prometheus-metrics
 pnpm add @llevintza/fastify-prometheus-metrics
 ```
 
-> **Note**: This package is published to GitHub Packages. You'll need to configure npm to use GitHub Packages for the `@llevintza` scope:
-> ```bash
-> echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
-> ```
+### GitHub Packages Configuration
 
-> **Prerelease Versions**: This package follows semantic versioning with prerelease support:
-> - `main` branch → stable releases (e.g., `1.0.0`)
-> - `release/*` branches → beta releases (e.g., `1.0.0-beta.1`) 
-> - `feature/*` branches → alpha releases (e.g., `1.0.0-alpha.1`)
-> 
-> See our [Branching Strategy](./docs/BRANCHING_STRATEGY.md) for complete details.
+This package is published to GitHub Packages. Configure npm for the `@llevintza` scope:
 
-> **Note for Contributors**: This project is maintained using Yarn, but users can install it with any package manager (npm, yarn, pnpm).
+```bash
+# Configure registry for the @llevintza scope
+echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
+
+# For private packages (if needed), add authentication
+echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc
+```
+
+### Release Channels
+
+This package follows a structured release strategy with automatic versioning:
+
+| Branch Pattern | Release Type | Example Version | Use Case |
+|----------------|--------------|-----------------|----------|
+| `main` | **Stable** | `1.0.0` | Production environments |
+| `release/*` | **Beta** | `1.1.0-beta.1` | Pre-release testing |
+| `feature/*` | **Alpha** | `1.1.0-alpha.2` | Feature development |
+
+**Installation Examples:**
+```bash
+# Production (stable)
+npm install @llevintza/fastify-prometheus-metrics
+
+# Testing upcoming release
+npm install @llevintza/fastify-prometheus-metrics@beta
+
+# Testing new features
+npm install @llevintza/fastify-prometheus-metrics@alpha
+
+# Specific version
+npm install @llevintza/fastify-prometheus-metrics@1.0.0-beta.2
+```
+
+> **📖 Documentation**: See our [Branching Strategy Guide](./docs/BRANCHING_STRATEGY.md) for complete details on versioning, commit conventions, and release workflow.
 
 ## Quick Start
 
@@ -424,11 +452,42 @@ yarn type-check
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
 
+## Documentation
+
+### 📚 Comprehensive Guides
+- 📖 [Release Guide](./docs/RELEASE_GUIDE.md) - Step-by-step instructions for creating releases
+- 🌿 [Branching Strategy](./docs/BRANCHING_STRATEGY.md) - Complete branching and release workflow
+- �‍💻 [Development Guide](./docs/DEVELOPMENT.md) - Setup and development instructions
+- 🤝 [Contributing Guidelines](./CONTRIBUTING.md) - How to contribute to the project
+
+### 🚀 Release Types
+- **Alpha** (`@alpha`): Feature development and early testing
+- **RC** (`@rc`): Pre-beta testing and validation  
+- **Beta** (`@beta`): Release candidates for final testing
+- **Next** (`@next`): Major version development with breaking changes
+- **Stable** (default): Production-ready releases
+- **Hotfix** (`@hotfix`): Emergency fixes for critical issues
+
+### 📦 Installation Examples
+```bash
+# Stable release (production)
+npm install @llevintza/fastify-prometheus-metrics
+
+# Test new features (alpha)  
+npm install @llevintza/fastify-prometheus-metrics@alpha
+
+# Test release candidates (beta)
+npm install @llevintza/fastify-prometheus-metrics@beta
+
+# Preview next major version (next)
+npm install @llevintza/fastify-prometheus-metrics@next
+```
+
 ## Support
 
-- 📖 [Documentation](https://github.com/llevintza/aws-node-prometheus#readme)
-- 🐛 [Issue Tracker](https://github.com/llevintza/aws-node-prometheus/issues)
-- 💬 [Discussions](https://github.com/llevintza/aws-node-prometheus/discussions)
+- 📖 [Documentation](./docs/) - Complete documentation in `/docs` folder
+- 🐛 [Issue Tracker](https://github.com/llevintza/aws-fastify-prometheus/issues)
+- 💬 [Discussions](https://github.com/llevintza/aws-fastify-prometheus/discussions)
 
 ## Changelog
 
