@@ -2,9 +2,11 @@
 
 A comprehensive Fastify plugin for collecting and exporting Prometheus metrics with optional AWS CloudWatch integration.
 
-[![npm version](https://badge.fury.io/js/@llevintza/fastify-prometheus-metrics.svg)](https://badge.fury.io/js/@llevintza/fastify-prometheus-metrics)
+[![GitHub Package Registry](https://img.shields.io/github/package-json/v/llevintza/aws-fastify-prometheus?color=blue&label=version&logo=github)](https://github.com/llevintza/aws-fastify-prometheus/packages)
+[![GitHub release](https://img.shields.io/github/v/release/llevintza/aws-fastify-prometheus?logo=github)](https://github.com/llevintza/aws-fastify-prometheus/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/%3C%2F%3E-TypeScript-%230074c1.svg)](http://www.typescriptlang.org/)
+[![GitHub Packages](https://img.shields.io/badge/GitHub%20Packages-@llevintza/fastify--prometheus--metrics-blue?logo=github)](https://github.com/llevintza/aws-fastify-prometheus/packages)
 
 ## Features
 
