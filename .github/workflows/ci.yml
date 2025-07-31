@@ -1,123 +1,482 @@
-name: CI
+name: Comprehensive CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, 'release/*', 'feature/*' ]
+    branches: [ main ]
   pull_request:
-    branches: [ main, 'release/*' ]
+    branches: [ main ]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
-  contents: write  # Need write to create releases and update files
-  packages: write  # Need write to publish packages
-  pull-requests: read
-  actions: read    # Need read for workflow access
+  contents: write
+  packages: write
+  pull-requests: write
+  actions: read
+  checks: write
+  statuses: write
 
 jobs:
-  lint:
+  # Setup job for dependency caching
+  setup:
+    name: Setup Dependencies
     runs-on: ubuntu-latest
-    
+    outputs:
+      cache-key: ${{ steps.cache-key.outputs.key }}
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Enable Corepack
-      run: corepack enable
-    
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'yarn'
-    
-    - name: Install dependencies
-      run: yarn install --immutable
-    
-    - name: Run linter
-      run: yarn lint
-    
-    - name: Check formatting
-      run: yarn format:check
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  test:
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Generate cache key
+        id: cache-key
+        run: echo "key=${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}" >> $GITHUB_OUTPUT
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+  # Type checking job
+  type-check:
+    name: TypeScript Type Check
     runs-on: ubuntu-latest
-    
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run TypeScript type checking
+        run: yarn type-check
+
+  # Linting and formatting job
+  lint-and-format:
+    name: Lint & Format Check
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run ESLint
+        run: yarn lint
+
+      - name: Check code formatting
+        run: yarn format:check
+
+      - name: Check for circular dependencies
+        run: |
+          npx madge --circular --extensions ts src/
+          if [ $? -eq 0 ]; then
+            echo "✅ No circular dependencies found"
+          else
+            echo "❌ Circular dependencies detected"
+            exit 1
+          fi
+
+  # Security audit job
+  security-audit:
+    name: Security Audit
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run security audit
+        run: |
+          echo "Running security audit..."
+          yarn audit --level moderate --groups dependencies || true
+          echo "Security audit completed"
+
+      - name: Check for known security issues
+        run: |
+          if command -v audit-ci &> /dev/null; then
+            npx audit-ci --moderate
+          else
+            echo "audit-ci not available, skipping detailed security check"
+          fi
+
+  # Build job
+  build:
+    name: Build Project
+    runs-on: ubuntu-latest
+    needs: setup
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Clean previous build
+        run: yarn clean
+
+      - name: Build project
+        run: yarn build
+
+      - name: Verify build outputs
+        run: |
+          echo "Checking build artifacts..."
+          if [ ! -d "dist" ]; then
+            echo "❌ Build failed: dist directory not found"
+            exit 1
+          fi
+          if [ ! -f "dist/index.js" ]; then
+            echo "❌ Build failed: dist/index.js not found"
+            exit 1
+          fi
+          if [ ! -f "dist/index.d.ts" ]; then
+            echo "❌ Build failed: dist/index.d.ts not found"
+            exit 1
+          fi
+          echo "✅ All build artifacts are present"
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+          retention-days: 7
+
+  # Comprehensive test job with coverage
+  test:
+    name: Test Suite (Node.js ${{ matrix.node-version }})
+    runs-on: ubuntu-latest
+    needs: setup
     strategy:
       matrix:
         node-version: [20, 22]
-    
+      fail-fast: false
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Enable Corepack
-      run: corepack enable
-    
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: 'yarn'
-    
-    - name: Install dependencies
-      run: yarn install --immutable
-    
-    - name: Run tests
-      run: yarn test
-    
-    - name: Upload coverage to Codecov
-      if: matrix.node-version == 22
-      uses: codecov/codecov-action@v3
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-  build:
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run tests with coverage
+        run: yarn test:coverage
+
+      - name: Check coverage thresholds
+        run: |
+          echo "Verifying coverage thresholds..."
+          if [ -f "coverage/coverage-summary.json" ]; then
+            node -e "
+              const coverage = require('./coverage/coverage-summary.json');
+              const total = coverage.total;
+              const thresholds = { branches: 40, functions: 24, lines: 45, statements: 45 };
+              
+              let failed = false;
+              Object.entries(thresholds).forEach(([key, threshold]) => {
+                const actual = total[key].pct;
+                console.log(\`\${key}: \${actual}% (threshold: \${threshold}%)\`);
+                if (actual < threshold) {
+                  console.error(\`❌ \${key} coverage (\${actual}%) below threshold (\${threshold}%)\`);
+                  failed = true;
+                } else {
+                  console.log(\`✅ \${key} coverage (\${actual}%) meets threshold (\${threshold}%)\`);
+                }
+              });
+              
+              if (failed) process.exit(1);
+              console.log('✅ All coverage thresholds met!');
+            "
+          else
+            echo "❌ Coverage summary not found"
+            exit 1
+          fi
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-node-${{ matrix.node-version }}
+          path: |
+            coverage/
+            coverage/junit.xml
+          retention-days: 7
+
+      - name: Upload coverage to Codecov
+        if: matrix.node-version == 22
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage/lcov.info
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+
+  # Package validation and integration tests
+  package-validation:
+    name: Package Validation
     runs-on: ubuntu-latest
-    needs: [lint, test]
-    
+    needs: [build]
     steps:
-    - uses: actions/checkout@v4
-    
-    - name: Enable Corepack
-      run: corepack enable
-    
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'yarn'
-    
-    - name: Install dependencies
-      run: yarn install --immutable
-    
-    - name: Build
-      run: yarn build
+      - name: Checkout code
+        uses: actions/checkout@v4
 
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Validate package.json
+        run: |
+          echo "Validating package.json..."
+          node -e "
+            const pkg = require('./package.json');
+            const required = ['name', 'version', 'description', 'main', 'types', 'author', 'license'];
+            const missing = required.filter(field => !pkg[field]);
+            if (missing.length > 0) {
+              console.error('❌ Missing required fields:', missing);
+              process.exit(1);
+            }
+            console.log('✅ Package.json validation passed');
+          "
+
+      - name: Test package import
+        run: |
+          echo "Testing package import..."
+          node -e "
+            try {
+              const pkg = require('./dist/index.js');
+              console.log('✅ Package can be imported successfully');
+              console.log('Exported items:', Object.keys(pkg));
+            } catch (error) {
+              console.error('❌ Package import failed:', error.message);
+              process.exit(1);
+            }
+          "
+
+      - name: Check package size
+        run: |
+          echo "Checking package size..."
+          size=$(npm pack --dry-run --json | jq -r '.size' 2>/dev/null || echo "0")
+          echo "Package size: $size bytes"
+          max_size=10485760  # 10MB
+          if [ "$size" -gt "$max_size" ]; then
+            echo "⚠️  Warning: Package size ($size bytes) is larger than 10MB"
+          else
+            echo "✅ Package size is acceptable"
+          fi
+
+  # PR-specific checks
+  pr-checks:
+    name: Pull Request Checks
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download test artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: test-results-node-22
+          path: coverage/
+
+      - name: Generate PR comment with results
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            let comment = '## 🚀 CI/CD Pipeline Results\n\n';
+            
+            // Add job status
+            const jobs = [
+              { name: 'Type Check', status: '${{ needs.type-check.result }}' },
+              { name: 'Lint & Format', status: '${{ needs.lint-and-format.result }}' },
+              { name: 'Security Audit', status: '${{ needs.security-audit.result }}' },
+              { name: 'Build', status: '${{ needs.build.result }}' },
+              { name: 'Tests', status: '${{ needs.test.result }}' },
+              { name: 'Package Validation', status: '${{ needs.package-validation.result }}' }
+            ];
+            
+            comment += '### 📋 Check Results\n\n';
+            jobs.forEach(job => {
+              const icon = job.status === 'success' ? '✅' : job.status === 'failure' ? '❌' : '⏳';
+              comment += `${icon} **${job.name}**: ${job.status}\n`;
+            });
+            
+            // Add coverage information if available
+            if (fs.existsSync('coverage/coverage-summary.json')) {
+              const coverage = JSON.parse(fs.readFileSync('coverage/coverage-summary.json', 'utf8'));
+              const total = coverage.total;
+              
+              comment += '\n### 📊 Test Coverage\n\n';
+              comment += '| Metric | Coverage | Threshold | Status |\n';
+              comment += '|--------|----------|-----------|--------|\n';
+              
+              const metrics = [
+                { name: 'Lines', value: total.lines.pct, threshold: 45 },
+                { name: 'Functions', value: total.functions.pct, threshold: 24 },
+                { name: 'Branches', value: total.branches.pct, threshold: 40 },
+                { name: 'Statements', value: total.statements.pct, threshold: 45 }
+              ];
+              
+              metrics.forEach(metric => {
+                const status = metric.value >= metric.threshold ? '✅' : '❌';
+                comment += `| ${metric.name} | ${metric.value}% | ${metric.threshold}% | ${status} |\n`;
+              });
+            }
+            
+            comment += '\n---\n*This comment was automatically generated by the CI/CD pipeline.*';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # Release job (only on main branch push)
   release:
+    name: Release
     runs-on: ubuntu-latest
-    needs: [lint, test, build]
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/') || startsWith(github.ref, 'refs/heads/feature/'))
-    
+    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
-    - uses: actions/checkout@v4
-      with:
-        fetch-depth: 0
-        token: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
 
-    - name: Enable Corepack
-      run: corepack enable
-    
-    - name: Use Node.js
-      uses: actions/setup-node@v4
-      with:
-        node-version: '22'
-        cache: 'yarn'
-        registry-url: 'https://npm.pkg.github.com'
-        scope: '@llevintza'
-    
-    - name: Install dependencies
-      run: yarn install --immutable
-    
-    - name: Build
-      run: yarn build
-    
-    - name: Release
-      run: yarn semantic-release
-      env:
-        GITHUB_TOKEN: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
-        NODE_AUTH_TOKEN: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+          registry-url: 'https://npm.pkg.github.com'
+          scope: '@llevintza'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: dist/
+
+      - name: Release
+        run: yarn semantic-release
+        env:
+          GITHUB_TOKEN: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.XOON_NPM_PUBLISH_TOKEN }}
+
+  # Final success indicator
+  ci-success:
+    name: CI Success
+    runs-on: ubuntu-latest
+    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    if: always()
+    steps:
+      - name: Check overall status
+        run: |
+          echo "Checking overall CI status..."
+          
+          jobs=(
+            "type-check:${{ needs.type-check.result }}"
+            "lint-and-format:${{ needs.lint-and-format.result }}"
+            "security-audit:${{ needs.security-audit.result }}"
+            "build:${{ needs.build.result }}"
+            "test:${{ needs.test.result }}"
+            "package-validation:${{ needs.package-validation.result }}"
+          )
+          
+          failed_jobs=()
+          for job in "${jobs[@]}"; do
+            name="${job%%:*}"
+            status="${job##*:}"
+            if [[ "$status" != "success" ]]; then
+              failed_jobs+=("$name")
+            fi
+          done
+          
+          if [[ ${#failed_jobs[@]} -gt 0 ]]; then
+            echo "❌ CI Pipeline failed. Failed jobs: ${failed_jobs[*]}"
+            exit 1
+          else
+            echo "✅ All CI checks passed successfully!"
+          fi

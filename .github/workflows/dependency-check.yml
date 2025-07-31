@@ -1,0 +1,122 @@
+name: Dependency Update Check
+
+on:
+  schedule:
+    # Run every Monday at 8 AM UTC
+    - cron: '0 8 * * 1'
+  workflow_dispatch: # Allow manual triggering
+
+jobs:
+  dependency-check:
+    name: Check for Dependency Updates
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Check for outdated dependencies
+        run: |
+          echo "Checking for outdated dependencies..."
+          yarn outdated --json > outdated-report.json || true
+          echo "Outdated dependencies report generated"
+
+      - name: Check for updates using npm-check-updates
+        run: |
+          echo "Checking for updates with npm-check-updates..."
+          npx npm-check-updates --format json --jsonFile ncu-report.json || true
+          npx npm-check-updates
+
+      - name: Generate dependency update report
+        run: |
+          echo "# Dependency Update Report" > dependency-report.md
+          echo "" >> dependency-report.md
+          echo "Generated on: $(date)" >> dependency-report.md
+          echo "" >> dependency-report.md
+          
+          if [ -f "outdated-report.json" ]; then
+            echo "## Yarn Outdated Dependencies" >> dependency-report.md
+            echo "" >> dependency-report.md
+            cat outdated-report.json >> dependency-report.md
+            echo "" >> dependency-report.md
+          fi
+          
+          if [ -f "ncu-report.json" ]; then
+            echo "## Available Updates (npm-check-updates)" >> dependency-report.md
+            echo "" >> dependency-report.md
+            cat ncu-report.json >> dependency-report.md
+          fi
+
+      - name: Create issue for dependency updates
+        if: github.event_name == 'schedule'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            
+            if (fs.existsSync('dependency-report.md')) {
+              const report = fs.readFileSync('dependency-report.md', 'utf8');
+              
+              // Check if there are any updates available
+              const hasUpdates = report.includes('"current":') || report.includes('"wanted":');
+              
+              if (hasUpdates) {
+                const issueTitle = `📦 Weekly Dependency Update Report - ${new Date().toISOString().split('T')[0]}`;
+                const issueBody = `${report}
+                
+                ## Action Required
+                
+                This is an automated report of available dependency updates. Please review and consider updating:
+                
+                1. Review the security impact of each update
+                2. Check breaking changes in changelogs
+                3. Update dependencies in batches
+                4. Run full test suite after updates
+                5. Update lockfile and commit changes
+                
+                ## Commands to Update
+                
+                \`\`\`bash
+                # Check what will be updated
+                yarn outdated
+                
+                # Update non-breaking changes
+                yarn upgrade
+                
+                # For major version updates, update individually
+                yarn add package-name@latest
+                \`\`\`
+                
+                ---
+                *This issue was automatically created by the Dependency Update Check workflow*`;
+                
+                github.rest.issues.create({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  title: issueTitle,
+                  body: issueBody,
+                  labels: ['dependencies', 'automated', 'maintenance']
+                });
+              }
+            }
+
+      - name: Upload dependency reports
+        uses: actions/upload-artifact@v4
+        with:
+          name: dependency-reports
+          path: |
+            outdated-report.json
+            ncu-report.json
+            dependency-report.md
+          retention-days: 30
