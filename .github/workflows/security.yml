@@ -33,11 +33,13 @@ jobs:
       - name: Install dependencies
         run: yarn install --immutable
 
-      - name: Run npm audit
+      - name: Run npm audit if lockfile exists
         run: |
-          echo "Running npm security audit..."
-          npm audit --audit-level=moderate --json > audit-report.json || true
-          npm audit --audit-level=moderate
+          if [ -f package-lock.json ]; then
+            npm audit --audit-level=moderate
+          else
+            echo "No lockfile found, skipping npm audit"
+          fi
 
       - name: Run Yarn audit
         run: |
