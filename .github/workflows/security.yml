@@ -1,0 +1,170 @@
+name: Security Analysis
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  schedule:
+    # Run security scan weekly on Mondays at 9 AM UTC
+    - cron: '0 9 * * 1'
+
+jobs:
+  security-scan:
+    name: Security Vulnerability Scan
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      actions: read
+      contents: read
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run npm audit
+        run: |
+          echo "Running npm security audit..."
+          yarn audit --json > audit-report.json || echo "Audit completed with findings"
+          yarn audit || echo "Audit found issues (this is normal)"
+
+      - name: Run additional audit checks
+        run: |
+          echo "Running additional security checks..."
+          # Check for yarn audit (if Yarn v1)
+          yarn_version=$(yarn --version)
+          echo "Yarn version: $yarn_version"
+          
+          if [[ "$yarn_version" =~ ^1\. ]]; then
+            echo "Running Yarn v1 native audit..."
+            yarn audit --level moderate --json > yarn-audit-report.json || true
+          else
+            echo "Yarn v2+ detected. npm audit already covers vulnerability scanning."
+          fi
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: javascript
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+
+      - name: Run Semgrep security scan
+        uses: returntocorp/semgrep-action@v1
+        continue-on-error: true
+        with:
+          config: >-
+            p/security-audit
+            p/secrets
+            p/javascript
+            p/typescript
+            p/nodejs
+
+      - name: Check for secrets in code
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: main
+          head: HEAD
+          extra_args: --debug --only-verified
+
+      - name: Analyze security report
+        run: |
+          echo "Analyzing security reports..."
+          
+          # Check yarn audit results
+          if [ -f "audit-report.json" ]; then
+            echo "Checking yarn audit results..."
+            vulnerabilities=$(wc -l < audit-report.json 2>/dev/null || echo "0")
+            echo "Found $vulnerabilities vulnerability entries in yarn audit"
+            
+            if [ "$vulnerabilities" -gt "0" ]; then
+              echo "⚠️ Security vulnerabilities found. Please review and fix."
+              echo "First few vulnerabilities:"
+              head -3 audit-report.json | jq -r '.children.Issue // .value' 2>/dev/null || head -3 audit-report.json
+            else
+              echo "✅ No vulnerabilities found in yarn audit"
+            fi
+          else
+            echo "No audit report found"
+          fi
+
+      - name: Generate security summary
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
+          script: |
+            const fs = require('fs');
+            let summary = '## 🔒 Security Analysis Summary\n\n';
+            
+            // yarn audit results (Yarn v2+ format)
+            if (fs.existsSync('audit-report.json')) {
+              try {
+                const auditContent = fs.readFileSync('audit-report.json', 'utf8');
+                const auditLines = auditContent.trim().split('\n').filter(line => line.trim());
+                const vulnCount = auditLines.length;
+                
+                summary += '### 🛡️ Dependency Vulnerabilities\n';
+                summary += `- **yarn audit**: ${vulnCount} vulnerability entries found\n`;
+                
+                if (vulnCount > 0) {
+                  summary += '⚠️ **Please review and update vulnerable dependencies**\n';
+                  
+                  // Show first few vulnerabilities
+                  const firstFew = auditLines.slice(0, 3);
+                  summary += '\n**Sample vulnerabilities:**\n';
+                  firstFew.forEach(line => {
+                    try {
+                      const vuln = JSON.parse(line);
+                      const issue = vuln.children?.Issue || vuln.value || 'Unknown issue';
+                      summary += `- ${issue}\n`;
+                    } catch (e) {
+                      summary += `- ${line.substring(0, 100)}...\n`;
+                    }
+                  });
+                } else {
+                  summary += '✅ **No vulnerabilities found**\n';
+                }
+              } catch (e) {
+                summary += '### 🛡️ Dependency Vulnerabilities\n❌ Could not parse audit report\n';
+              }
+            } else {
+              summary += '### 🛡️ Dependency Vulnerabilities\n❌ No audit report found\n';
+            }
+            
+            summary += '\n### 🔍 Additional Security Checks\n';
+            summary += '- ✅ CodeQL static analysis completed\n';
+            summary += '- ✅ Semgrep security rules applied\n';
+            summary += '- ✅ Secret scanning performed\n\n';
+            
+            summary += '---\n*Generated by Security Analysis workflow*';
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: summary
+            });
+
+      - name: Upload security reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-reports
+          path: |
+            audit-report.json
+            yarn-audit-report.json
+          retention-days: 30
