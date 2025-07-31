@@ -1148,10 +1148,10 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@eslint/js@npm:^9.31.0":
-  version: 9.31.0
-  resolution: "@eslint/js@npm:9.31.0"
-  checksum: 10c0/f9d4c73d0fafe70679a418cbb25ab7ebcc8f1dba6c32456d6f8ba5a137d583ecff233cfe10f61f41d7d4d2220e94cff1f39fc7ed1fa3819d1888dee1cad678ea
+"@eslint/js@npm:^9.32.0":
+  version: 9.32.0
+  resolution: "@eslint/js@npm:9.32.0"
+  checksum: 10c0/f71e8f9146638d11fb15238279feff98801120a4d4130f1c587c4f09b024ff5ec01af1ba88e97ba6b7013488868898a668f77091300cc3d4394c7a8ed32d2667
   languageName: node
   linkType: hard
 
@@ -1547,7 +1547,7 @@ __metadata:
     "@aws-sdk/client-cloudwatch": "npm:^3.848.0"
     "@commitlint/cli": "npm:^18.4.3"
     "@commitlint/config-conventional": "npm:^18.4.3"
-    "@eslint/js": "npm:^9.31.0"
+    "@eslint/js": "npm:^9.32.0"
     "@jest/globals": "npm:^29.7.0"
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
@@ -1573,7 +1573,7 @@ __metadata:
     semantic-release: "npm:^22.0.8"
     ts-jest: "npm:^29.1.1"
     ts-node: "npm:^10.9.1"
-    typescript: "npm:^5.3.2"
+    typescript: "npm:^5.9.2"
   peerDependencies:
     fastify: ^4.0.0
   languageName: unknown
@@ -10825,23 +10825,23 @@ __metadata:
   languageName: node
   linkType: hard
 
-"typescript@npm:^5.3.2":
-  version: 5.8.3
-  resolution: "typescript@npm:5.8.3"
+"typescript@npm:^5.9.2":
+  version: 5.9.2
+  resolution: "typescript@npm:5.9.2"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/5f8bb01196e542e64d44db3d16ee0e4063ce4f3e3966df6005f2588e86d91c03e1fb131c2581baf0fb65ee79669eea6e161cd448178986587e9f6844446dbb48
+  checksum: 10c0/cd635d50f02d6cf98ed42de2f76289701c1ec587a363369255f01ed15aaf22be0813226bff3c53e99d971f9b540e0b3cc7583dbe05faded49b1b0bed2f638a18
   languageName: node
   linkType: hard
 
-"typescript@patch:typescript@npm%3A^5.3.2#optional!builtin<compat/typescript>":
-  version: 5.8.3
-  resolution: "typescript@patch:typescript@npm%3A5.8.3#optional!builtin<compat/typescript>::version=5.8.3&hash=5786d5"
+"typescript@patch:typescript@npm%3A^5.9.2#optional!builtin<compat/typescript>":
+  version: 5.9.2
+  resolution: "typescript@patch:typescript@npm%3A5.9.2#optional!builtin<compat/typescript>::version=5.9.2&hash=5786d5"
   bin:
     tsc: bin/tsc
     tsserver: bin/tsserver
-  checksum: 10c0/39117e346ff8ebd87ae1510b3a77d5d92dae5a89bde588c747d25da5c146603a99c8ee588c7ef80faaf123d89ed46f6dbd918d534d641083177d5fac38b8a1cb
+  checksum: 10c0/34d2a8e23eb8e0d1875072064d5e1d9c102e0bdce56a10a25c0b917b8aa9001a9cf5c225df12497e99da107dc379360bc138163c66b55b95f5b105b50578067e
   languageName: node
   linkType: hard
 
