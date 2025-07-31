@@ -120,3 +120,5 @@ jobs:
             complexity-report.json
             cpd-report/
           retention-days: 7
+        env:
+          GITHUB_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
