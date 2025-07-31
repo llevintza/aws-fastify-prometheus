@@ -130,7 +130,7 @@ jobs:
       - name: Run security audit
         run: |
           echo "Running security audit..."
-          yarn audit --level moderate --groups dependencies || true
+          yarn audit || echo "Audit found issues (expected behavior)"
           echo "Security audit completed"
 
       - name: Check for known security issues

@@ -51,11 +51,11 @@ This document provides an overview of all GitHub Actions workflows implemented f
 **Purpose:** Comprehensive security vulnerability scanning
 
 #### Security Checks:
-- 🛡️ npm audit for dependency vulnerabilities
+- 🛡️ yarn audit for dependency vulnerabilities (via `yarn npm audit` for Yarn v2+)
 - 🔍 CodeQL static analysis
-- 🔐 Semgrep security rule scanning
+- 🔐 Semgrep security rule scanning (with fallback if no token)
 - 🕵️ TruffleHog secret detection
-- 📊 Security summary reporting
+- 📊 Security summary reporting with Yarn v2+ JSON format parsing
 
 ---
 

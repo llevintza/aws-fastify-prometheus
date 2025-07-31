@@ -23,6 +23,9 @@
     "test:coverage": "jest --coverage",
     "test:ci": "jest --coverage --ci --reporters=jest-junit",
     "type-check": "tsc --noEmit",
+    "audit": "yarn npm audit --all --recursive",
+    "audit:summary": "yarn npm audit --all --recursive --json | jq '.vulnerabilities | length' || echo 'jq not available'",
+    "security": "yarn audit",
     "prepare": "husky install",
     "prepublishOnly": "yarn clean && yarn build && yarn test",
     "semantic-release": "semantic-release"
