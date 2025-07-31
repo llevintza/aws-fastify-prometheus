@@ -1,4 +1,4 @@
-name: Comprehensive CI/CD Pipeline
+name: CI/CD
 
 on:
   push:
@@ -21,7 +21,7 @@ permissions:
 jobs:
   # Setup job for dependency caching
   setup:
-    name: Setup Dependencies
+    name: Setup
     runs-on: ubuntu-latest
     outputs:
       cache-key: ${{ steps.cache-key.outputs.key }}
@@ -143,7 +143,7 @@ jobs:
 
   # Build job
   build:
-    name: Build Project
+    name: Build
     runs-on: ubuntu-latest
     needs: setup
     steps:
@@ -194,7 +194,7 @@ jobs:
 
   # Comprehensive test job with coverage
   test:
-    name: Test Suite (Node.js ${{ matrix.node-version }})
+    name: Test (Node.js ${{ matrix.node-version }})
     runs-on: ubuntu-latest
     needs: setup
     strategy:
@@ -337,7 +337,7 @@ jobs:
 
   # PR-specific checks
   pr-checks:
-    name: Pull Request Checks
+    name: PR Checks
     runs-on: ubuntu-latest
     if: github.event_name == 'pull_request'
     needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
@@ -354,6 +354,7 @@ jobs:
       - name: Generate PR comment with results
         uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
           script: |
             const fs = require('fs');
             
