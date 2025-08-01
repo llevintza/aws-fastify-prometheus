@@ -75,7 +75,7 @@
     "eslint-config-prettier": "^9.0.0",
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.29.0",
-    "eslint-plugin-jest": "^27.6.0",
+    "eslint-plugin-jest": "^28.0.0",
     "eslint-plugin-prettier": "^5.0.1",
     "fastify": "^4.24.3",
     "husky": "^9.1.7",
