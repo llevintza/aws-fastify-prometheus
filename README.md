@@ -447,6 +447,8 @@ yarn type-check
 - `yarn lint:fix` - Fix ESLint issues
 - `yarn format` - Format code with Prettier
 - `yarn format:check` - Check code formatting
+- `yarn audit` - Run dependency security audit
+- `yarn security:analyze` - Detailed security analysis with recommendations
 
 ## License
 
@@ -459,6 +461,7 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 - 🌿 [Branching Strategy](./docs/BRANCHING_STRATEGY.md) - Complete branching and release workflow
 - �‍💻 [Development Guide](./docs/DEVELOPMENT.md) - Setup and development instructions
 - 🤝 [Contributing Guidelines](./CONTRIBUTING.md) - How to contribute to the project
+- 🔒 [Security Analysis](./docs/SECURITY_ANALYSIS.md) - Security vulnerability analysis and mitigation
 
 ### 🚀 Release Types
 - **Alpha** (`@alpha`): Feature development and early testing

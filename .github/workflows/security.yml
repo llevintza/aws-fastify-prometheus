@@ -91,9 +91,34 @@ jobs:
             echo "Found $vulnerabilities vulnerability entries in yarn audit"
             
             if [ "$vulnerabilities" -gt "0" ]; then
-              echo "⚠️ Security vulnerabilities found. Please review and fix."
-              echo "First few vulnerabilities:"
-              head -3 audit-report.json | jq -r '.children.Issue // .value' 2>/dev/null || head -3 audit-report.json
+              echo "⚠️ Security vulnerabilities found. Details:"
+              echo "================================================"
+              
+              # Parse each vulnerability properly
+              while IFS= read -r line; do
+                if [ -n "$line" ]; then
+                  echo "🔍 Analyzing vulnerability..."
+                  package=$(echo "$line" | jq -r '.value // "Unknown"' 2>/dev/null)
+                  issue=$(echo "$line" | jq -r '.children.Issue // "Unknown issue"' 2>/dev/null)
+                  severity=$(echo "$line" | jq -r '.children.Severity // "Unknown"' 2>/dev/null)
+                  version=$(echo "$line" | jq -r '.children["Vulnerable Versions"] // "Unknown"' 2>/dev/null)
+                  dependents=$(echo "$line" | jq -r '.children.Dependents[]? // "Unknown"' 2>/dev/null)
+                  
+                  echo "📦 Package: $package"
+                  echo "🚨 Severity: $severity"
+                  echo "📄 Issue: $issue"
+                  echo "🔢 Vulnerable Version: $version"
+                  echo "📋 Used by: $dependents"
+                  echo "------------------------------------------------"
+                fi
+              done < audit-report.json
+              
+              echo ""
+              echo "💡 RECOMMENDATIONS:"
+              echo "1. Check if these are direct dependencies in package.json"
+              echo "2. Update packages with: yarn upgrade"
+              echo "3. For transitive deps, update the parent packages"
+              echo "4. Consider using 'yarn why <package>' to trace dependency paths"
             else
               echo "✅ No vulnerabilities found in yarn audit"
             fi
@@ -118,23 +143,39 @@ jobs:
                 const vulnCount = auditLines.length;
                 
                 summary += '### 🛡️ Dependency Vulnerabilities\n';
-                summary += `- **yarn audit**: ${vulnCount} vulnerability entries found\n`;
+                summary += `- **yarn audit**: ${vulnCount} vulnerability entries found\n\n`;
                 
                 if (vulnCount > 0) {
-                  summary += '⚠️ **Please review and update vulnerable dependencies**\n';
+                  summary += '⚠️ **Vulnerabilities detected - please review:**\n\n';
                   
-                  // Show first few vulnerabilities
-                  const firstFew = auditLines.slice(0, 3);
-                  summary += '\n**Sample vulnerabilities:**\n';
-                  firstFew.forEach(line => {
+                  // Parse and display vulnerabilities properly
+                  auditLines.slice(0, 5).forEach((line, index) => {
                     try {
                       const vuln = JSON.parse(line);
-                      const issue = vuln.children?.Issue || vuln.value || 'Unknown issue';
-                      summary += `- ${issue}\n`;
+                      const pkg = vuln.value || 'Unknown package';
+                      const issue = vuln.children?.Issue || 'Unknown issue';
+                      const severity = vuln.children?.Severity || 'Unknown';
+                      const version = vuln.children?.['Vulnerable Versions'] || 'Unknown';
+                      const dependents = vuln.children?.Dependents?.join(', ') || 'Unknown';
+                      
+                      summary += `#### ${index + 1}. 📦 \`${pkg}\` (${severity})\n`;
+                      summary += `- **Issue**: ${issue}\n`;
+                      summary += `- **Vulnerable Version**: \`${version}\`\n`;
+                      summary += `- **Used by**: ${dependents}\n\n`;
                     } catch (e) {
-                      summary += `- ${line.substring(0, 100)}...\n`;
+                      summary += `#### ${index + 1}. Raw entry\n\`\`\`\n${line.substring(0, 200)}...\n\`\`\`\n\n`;
                     }
                   });
+                  
+                  if (vulnCount > 5) {
+                    summary += `*... and ${vulnCount - 5} more vulnerabilities*\n\n`;
+                  }
+                  
+                  summary += '### 💡 Recommended Actions:\n';
+                  summary += '1. Run `yarn upgrade` to update packages\n';
+                  summary += '2. Use `yarn why <package>` to trace dependency paths\n';
+                  summary += '3. Consider updating parent packages for transitive dependencies\n';
+                  summary += '4. Check if any direct dependencies can be updated in package.json\n\n';
                 } else {
                   summary += '✅ **No vulnerabilities found**\n';
                 }
