@@ -267,6 +267,6 @@ NODE_ENV=development yarn test
 
 ## Support
 
-- 📖 [Documentation](https://github.com/llevintza/aws-node-prometheus#readme)
-- 🐛 [Issue Tracker](https://github.com/llevintza/aws-node-prometheus/issues)
-- 💬 [Discussions](https://github.com/llevintza/aws-node-prometheus/discussions)
+- 📖 [Documentation](https://github.com/llevintza/aws-fastify-prometheus#readme)
+- 🐛 [Issue Tracker](https://github.com/llevintza/aws-fastify-prometheus/issues)
+- 💬 [Discussions](https://github.com/llevintza/aws-fastify-prometheus/discussions)

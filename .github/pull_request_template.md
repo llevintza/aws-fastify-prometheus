@@ -91,7 +91,7 @@ Relates to #
 ---
 
 **By submitting this pull request, I confirm that:**
-- [ ] I have read and understood the [Contributing Guidelines](CONTRIBUTING.md)
+- [ ] I have read and understood the [Contributing Guidelines](../CONTRIBUTING.md)
 - [ ] My code adheres to the project's coding standards
 - [ ] I have tested my changes thoroughly
 - [ ] I understand that this PR will require at least 2 approved reviews before merging
