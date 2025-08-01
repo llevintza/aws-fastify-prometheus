@@ -89,7 +89,7 @@
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@aws-sdk/client-cloudwatch": "^3.848.0",
+    "@aws-sdk/client-cloudwatch": "^3.858.0",
     "fastify-plugin": "^4.5.1",
     "prom-client": "^15.1.0"
   },
