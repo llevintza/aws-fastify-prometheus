@@ -18,7 +18,7 @@ We take the security of our software seriously. If you believe you have found a 
 
 Instead, please report them via GitHub's security advisory feature:
 
-1. Go to the [Security Advisories](https://github.com/llevintza/aws-node-prometheus/security/advisories) page
+1. Go to the [Security Advisories](https://github.com/llevintza/aws-fastify-prometheus/security/advisories) page
 2. Click "Report a vulnerability"
 3. Fill out the form with as much detail as possible
 

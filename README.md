@@ -376,8 +376,6 @@ Check out the [examples](./examples) directory for complete working examples:
 
 - [Basic Setup](./examples/basic.ts)
 - [Advanced Configuration](./examples/advanced.ts)
-- [Custom Metrics](./examples/custom-metrics.ts)
-- [AWS CloudWatch Integration](./examples/aws-integration.ts)
 
 ## Contributing
 
@@ -396,8 +394,8 @@ This project uses Yarn for package management and development workflows.
 
 ```bash
 # Clone the repository
-git clone https://github.com/llevintza/aws-node-prometheus.git
-cd aws-node-prometheus
+git clone https://github.com/llevintza/aws-fastify-prometheus.git
+cd aws-fastify-prometheus
 
 # If you use nvm, set the correct Node.js version
 nvm use
