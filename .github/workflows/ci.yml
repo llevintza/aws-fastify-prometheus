@@ -359,6 +359,8 @@ jobs:
           else
             echo "Secret is available"
           fi
+        env:
+          CODE_QUALITY_REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
           
       - name: Generate PR comment with results
         uses: actions/github-script@v7
