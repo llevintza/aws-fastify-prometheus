@@ -354,7 +354,7 @@ jobs:
       - name: Debug secret availability
         run: |
           if [ -z "${{ secrets.CODE_QUALITY_REPORT_TOKEN }}" ]; then
-            echo "Secret is NOT available"
+            echo "ERROR: Secret is NOT available"
             exit 1
           else
             echo "Secret is available"
