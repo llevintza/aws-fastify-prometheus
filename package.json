@@ -91,7 +91,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-cloudwatch": "^3.858.0",
-    "fastify-plugin": "^4.5.1",
+    "fastify-plugin": "^5.0.1",
     "prom-client": "^15.1.0"
   },
   "publishConfig": {
