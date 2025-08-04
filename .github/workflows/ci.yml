@@ -358,7 +358,7 @@ jobs:
             exit 1
           else
             echo "Secret is available"
-          fi1
+          fi
         env:
           CODE_QUALITY_REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
           
