@@ -1,0 +1,226 @@
+name: Enhanced Dependabot Auto-Review
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  checks: read
+  statuses: read
+  security-events: read
+
+jobs:
+  enhanced-auto-review:
+    name: Enhanced Auto-Review for Dependabot
+    runs-on: ubuntu-latest
+    if: github.actor == 'dependabot[bot]'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          ref: ${{ github.event.pull_request.head.sha }}
+
+      - name: Get Dependabot metadata
+        id: dependabot-metadata
+        uses: dependabot/fetch-metadata@v1
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'yarn'
+
+      - name: Install dependencies
+        run: yarn install --immutable
+
+      - name: Run security audit on updated dependencies
+        id: security-audit
+        run: |
+          echo "Running security audit on updated dependencies..."
+          
+          # Run yarn audit and capture results
+          audit_output=$(yarn audit --json 2>/dev/null || true)
+          echo "Audit output: $audit_output"
+          
+          # Count critical and high severity vulnerabilities
+          critical_count=0
+          high_count=0
+          
+          if [ -n "$audit_output" ]; then
+            # Parse JSON output to count vulnerabilities by severity
+            critical_count=$(echo "$audit_output" | jq -r 'select(.type == "auditAdvisory") | select(.data.advisory.severity == "critical") | .data.advisory.severity' 2>/dev/null | wc -l || echo "0")
+            high_count=$(echo "$audit_output" | jq -r 'select(.type == "auditAdvisory") | select(.data.advisory.severity == "high") | .data.advisory.severity' 2>/dev/null | wc -l || echo "0")
+          fi
+          
+          echo "Critical vulnerabilities found: $critical_count"
+          echo "High severity vulnerabilities found: $high_count"
+          
+          echo "critical_vulns=$critical_count" >> $GITHUB_OUTPUT
+          echo "high_vulns=$high_count" >> $GITHUB_OUTPUT
+          
+          # Determine if security check passes
+          if [ "$critical_count" -eq 0 ] && [ "$high_count" -eq 0 ]; then
+            echo "security_passed=true" >> $GITHUB_OUTPUT
+            echo "✅ No critical or high severity vulnerabilities found"
+          else
+            echo "security_passed=false" >> $GITHUB_OUTPUT
+            echo "❌ Found $critical_count critical and $high_count high severity vulnerabilities"
+          fi
+
+      - name: Wait for all required checks
+        uses: lewagon/wait-on-check-action@v1.3.3
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          running-workflow-name: 'Enhanced Dependabot Auto-Review'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          allowed-conclusions: success,neutral,skipped
+
+      - name: Check dependency risk level
+        id: risk-assessment
+        run: |
+          dependency_names="${{ steps.dependabot-metadata.outputs.dependency-names }}"
+          update_type="${{ steps.dependabot-metadata.outputs.update-type }}"
+          
+          echo "Assessing risk for: $dependency_names"
+          echo "Update type: $update_type"
+          
+          # Define high-risk dependencies that need manual review
+          high_risk_deps="fastify|@fastify/|fastify-plugin"
+          monitoring_deps="prom-client|prometheus-|aws-sdk"
+          
+          risk_level="low"
+          
+          # Check if any dependency is in the high-risk list (for major updates)
+          if echo "$dependency_names" | grep -E "$high_risk_deps" && [ "$update_type" = "version-update:semver-major" ]; then
+            risk_level="high"
+            echo "High-risk Fastify major update detected"
+          fi
+          
+          # Check for monitoring tool major updates
+          if echo "$dependency_names" | grep -E "$monitoring_deps" && [ "$update_type" = "version-update:semver-major" ]; then
+            risk_level="high"
+            echo "High-risk monitoring tool major update detected"
+          fi
+          
+          # Major updates are always higher risk
+          if [ "$update_type" = "version-update:semver-major" ]; then
+            risk_level="medium"
+            echo "Major version update - elevated risk"
+          fi
+          
+          # Group-specific risk assessment
+          if echo "$dependency_names" | grep -E "fastify-ecosystem-major|aws-ecosystem.*major|security-critical"; then
+            risk_level="high"
+            echo "High-risk dependency group detected"
+          fi
+          
+          echo "risk_level=$risk_level" >> $GITHUB_OUTPUT
+
+      - name: Auto-approve safe updates
+        if: |
+          steps.security-audit.outputs.security_passed == 'true' &&
+          (steps.risk-assessment.outputs.risk_level == 'low' || steps.risk-assessment.outputs.risk_level == 'medium') &&
+          (steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' ||
+           steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor')
+        run: |
+          echo "Auto-approving safe dependency update..."
+          
+          # Create detailed approval message based on risk level
+          risk_level="${{ steps.risk-assessment.outputs.risk_level }}"
+          if [ "$risk_level" = "low" ]; then
+            approval_icon="🟢"
+            approval_text="**Low Risk - Safe to Auto-Approve**"
+          else
+            approval_icon="🟡"
+            approval_text="**Medium Risk - Approved with Monitoring**"
+          fi
+          
+          approval_message="🤖 **Automated Approval** $approval_icon
+
+          This dependency update has been automatically approved:
+
+          ✅ **Security Check**: No critical or high severity vulnerabilities
+          ✅ **Risk Assessment**: $approval_text
+          ✅ **Update Type**: ${{ steps.dependabot-metadata.outputs.update-type }}
+          ✅ **CI/CD Status**: All checks passed
+
+          **Updated Dependencies:**
+          ${{ steps.dependabot-metadata.outputs.dependency-names }}
+
+          **Security Scan Results:**
+          - Critical vulnerabilities: ${{ steps.security-audit.outputs.critical_vulns }}
+          - High severity vulnerabilities: ${{ steps.security-audit.outputs.high_vulns }}
+
+          **Dependency Groups Detected:**
+          $(echo '${{ steps.dependabot-metadata.outputs.dependency-names }}' | grep -E 'fastify|@aws-sdk|eslint|prettier|typescript|jest' | sed 's/^/- /' || echo '- Individual dependency update')
+
+          This PR is safe to merge. 🚀"
+
+          gh pr review --approve "${{ github.event.pull_request.number }}" --body "$approval_message"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Auto-merge patch updates
+        if: |
+          steps.security-audit.outputs.security_passed == 'true' &&
+          steps.risk-assessment.outputs.risk_level == 'low' &&
+          steps.dependabot-metadata.outputs.update-type == 'version-update:semver-patch' &&
+          !contains(steps.dependabot-metadata.outputs.dependency-names, 'fastify') &&
+          !contains(steps.dependabot-metadata.outputs.dependency-names, '@aws-sdk')
+        run: |
+          echo "Auto-merging safe patch update..."
+          echo "Dependencies: ${{ steps.dependabot-metadata.outputs.dependency-names }}"
+          gh pr merge --squash "${{ github.event.pull_request.number }}" --body "🤖 Auto-merged safe patch update"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Request manual review for risky updates
+        if: |
+          steps.security-audit.outputs.security_passed == 'false' ||
+          steps.risk-assessment.outputs.risk_level == 'high'
+        run: |
+          echo "Requesting manual review for potentially risky update..."
+          
+          review_reasons=""
+          
+          if [ "${{ steps.security-audit.outputs.security_passed }}" = "false" ]; then
+            review_reasons="$review_reasons
+          🔐 **Security Concerns**: Found ${{ steps.security-audit.outputs.critical_vulns }} critical and ${{ steps.security-audit.outputs.high_vulns }} high severity vulnerabilities"
+          fi
+          
+          if [ "${{ steps.risk-assessment.outputs.risk_level }}" = "high" ]; then
+            review_reasons="$review_reasons
+          ⚠️ **High Risk**: This update involves critical dependencies or major version changes"
+          fi
+          
+          comment_message="🔍 **Manual Review Required**
+
+          This dependency update requires human review due to:
+          $review_reasons
+
+          **Updated Dependencies:**
+          ${{ steps.dependabot-metadata.outputs.dependency-names }}
+
+          **Update Type:** ${{ steps.dependabot-metadata.outputs.update-type }}
+
+          **Recommended Actions:**
+          1. Review the changelog for breaking changes
+          2. Check security advisories for the affected dependencies
+          3. Run integration tests locally
+          4. Verify compatibility with your codebase
+
+          @${{ github.repository_owner }} please review this PR manually."
+
+          gh pr comment "${{ github.event.pull_request.number }}" --body "$comment_message"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
