@@ -45,6 +45,26 @@ This document provides an overview of all GitHub Actions workflows implemented f
 
 ---
 
+### 🤖 Dependabot Automation (`auto-approve-dependabot.yml`, `enhanced-dependabot-review.yml`)
+
+**Triggers:** Dependabot pull requests (opened, synchronize, reopened)
+**Purpose:** Automated review and approval of dependency updates
+
+#### Features:
+- 🔍 **Smart Security Analysis** - Scans for critical/high severity vulnerabilities
+- 🎯 **Risk Assessment** - Evaluates dependency risk level and update type
+- ✅ **Auto-Approval** - Approves safe patch and minor updates automatically
+- 🔄 **Auto-Merge** - Merges low-risk patch updates without manual intervention
+- 💬 **Intelligent Comments** - Provides detailed approval reasoning or manual review requests
+- ⚠️ **Manual Review Triggers** - Flags major updates and high-risk dependencies
+
+#### Safety Rules:
+- ✅ Auto-approve: Patch/minor updates with no critical vulnerabilities
+- ✅ Auto-merge: Patch updates only for low-risk dependencies
+- ❌ Manual review: Major updates, high-risk deps, security vulnerabilities
+
+---
+
 ### 🔒 Security Analysis (`security.yml`)
 
 **Triggers:** Pull requests, pushes to `main`, weekly schedule (Mondays 9 AM UTC)

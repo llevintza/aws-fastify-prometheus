@@ -1,15 +1,13 @@
 version: 2
 updates:
-  # Enable version updates for npm
+  # Primary npm dependency updates - Comprehensive weekly update
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "09:00"
-    open-pull-requests-limit: 5
-    reviewers:
-      - "llevintza"
+      interval: "cron"
+      cronjob: "0 9 * * 1,3" # Monday and Wednesday at 09:00 UTC
+      timezone: "UTC"
+    open-pull-requests-limit: 25
     assignees:
       - "llevintza"
     commit-message:
@@ -18,44 +16,168 @@ updates:
       include: "scope"
     labels:
       - "dependencies"
+      - "dependabot"
+      - "bi-weekly-update"
       - "automated"
     versioning-strategy: "auto"
+    rebase-strategy: "auto"
     
-    # Group updates by dependency type
+    # Strategic dependency groupings optimized for your project
     groups:
-      production-dependencies:
+      # Fastify ecosystem - ALL major versions together (as requested)
+      fastify-ecosystem-major:
+        patterns:
+          - "fastify"
+          - "@fastify/swagger"
+          - "@fastify/cors" 
+          - "@fastify/swagger-ui"
+          - "fastify-plugin"
+          - "@fastify/*"
+        update-types:
+          - "major"
+      
+      # Fastify ecosystem - minor and patch updates
+      fastify-ecosystem:
+        patterns:
+          - "fastify"
+          - "@fastify/swagger"
+          - "@fastify/cors"
+          - "@fastify/swagger-ui" 
+          - "fastify-plugin"
+          - "@fastify/*"
+        update-types:
+          - "minor"
+          - "patch"
+      
+      # AWS SDK ecosystem - grouped together
+      aws-ecosystem:
+        patterns:
+          - "@aws-sdk/*"
+          - "aws-sdk"
+          - "aws-*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Node.js runtime and types
+      node-ecosystem:
+        patterns:
+          - "@types/node"
+          - "node"
+          - "ts-node"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Linting and formatting tools (comprehensive group)
+      linting-formatting:
+        patterns:
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-*"
+          - "prettier"
+          - "@prettier/*"
+          - "lint-staged"
+          - "husky"
+          - "@commitlint/*"
+          - "commitlint"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # TypeScript ecosystem
+      typescript-ecosystem:
+        patterns:
+          - "typescript"
+          - "@typescript-eslint/*"
+          - "ts-*"
+          - "@types/*"
+        exclude-patterns:
+          - "@types/node"  # This goes to node-ecosystem
+          - "@types/jest"  # This goes to jest-testing
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Jest testing framework
+      jest-testing:
+        patterns:
+          - "jest"
+          - "@jest/*"
+          - "jest-*"
+          - "@types/jest"
+          - "ts-jest"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Build and utility tools
+      build-utilities:
+        patterns:
+          - "rimraf"
+          - "semantic-release"
+          - "@semantic-release/*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Monitoring and metrics (production dependencies)
+      monitoring-tools:
+        patterns:
+          - "prom-client"
+          - "prometheus-*"
+          - "*-metrics"
+        update-types:
+          - "minor"
+          - "patch"
+        # Major versions for monitoring tools need careful review
+      
+      # Security-critical production dependencies (separate for careful review)
+      security-critical:
         dependency-type: "production"
+        exclude-patterns:
+          - "fastify*"
+          - "@fastify/*"
+          - "@aws-sdk/*"
+          - "prom-client"
         update-types:
-          - "minor"
-          - "patch"
-      development-dependencies:
-        dependency-type: "development"
-        update-types:
-          - "minor"
-          - "patch"
+          - "major"
     
-    # Ignore specific dependencies if needed
-    ignore:
-      # Ignore major version updates for critical dependencies
-      - dependency-name: "fastify"
-        update-types: ["version-update:semver-major"]
-      # Add other dependencies to ignore here if needed
+    # Security and stability rules
+    # Note: Dependabot automatically excludes pre-release versions by default
+    # unless specifically configured to include them
     
-    # Security updates
+    # Uncomment and customize ignore rules as needed:
+    # ignore:
+    #   - dependency-name: "package-name"
+    #     versions: ["4.x", "5.0.0-beta.1"]
+    
+    # Special handling for critical packages (let automation handle these carefully)
+    # Major version updates for core framework will be grouped but reviewed carefully
+    
+    # Always allow security updates
     allow:
       - dependency-type: "direct"
       - dependency-type: "indirect"
+    
+    # Better PR branch naming
+    pull-request-branch-name:
+      separator: "/"
 
-  # Enable version updates for GitHub Actions
+  # GitHub Actions updates - optimized schedule
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "10:00"
-    open-pull-requests-limit: 3
-    reviewers:
-      - "llevintza"
+      interval: "cron"
+      cronjob: "0 9 * * 1,3" # Monday and Wednesday at 09:00 UTC
+      timezone: "UTC"
+    open-pull-requests-limit: 10
     assignees:
       - "llevintza"
     commit-message:
@@ -65,3 +187,34 @@ updates:
       - "github-actions"
       - "automated"
       - "ci"
+    
+    groups:
+      # Official GitHub Actions
+      github-actions-official:
+        patterns:
+          - "actions/*"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Third-party security and analysis actions
+      security-actions:
+        patterns:
+          - "github/codeql-action/*"
+          - "returntocorp/semgrep-action"
+          - "trufflesecurity/trufflehog"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
+      
+      # Dependency and automation actions
+      dependency-actions:
+        patterns:
+          - "dependabot/*"
+          - "lewagon/wait-on-check-action"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
