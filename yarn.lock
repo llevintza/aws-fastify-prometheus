@@ -1664,7 +1664,7 @@ __metadata:
     "@semantic-release/changelog": "npm:^6.0.3"
     "@semantic-release/git": "npm:^10.0.1"
     "@types/jest": "npm:^30.0.0"
-    "@types/node": "npm:^22"
+    "@types/node": "npm:^24"
     "@typescript-eslint/eslint-plugin": "npm:^8.38.0"
     "@typescript-eslint/parser": "npm:^7.18.0"
     eslint: "npm:^9.32.0"
@@ -3033,12 +3033,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@types/node@npm:^22":
-  version: 22.17.0
-  resolution: "@types/node@npm:22.17.0"
+"@types/node@npm:^24":
+  version: 24.2.1
+  resolution: "@types/node@npm:24.2.1"
   dependencies:
-    undici-types: "npm:~6.21.0"
-  checksum: 10c0/e1c603b660d3de3243dfc02ded5d40623ff3f36315ffbdd8cdc81bc2c5a8da172035879d437b72e9fa61ca01827f28e9c2b0c32898f411a8e9ba0a5efac0b4ca
+    undici-types: "npm:~7.10.0"
+  checksum: 10c0/439a3c7edf88a298e0c92e46f670234070b892589c3b06e82cc86c47a7e1cf220f4a4b4736ec6ac7e4b9e1c40d7b6d443a1e22f99dd17f13f9dd15de3b32011b
   languageName: node
   linkType: hard
 
@@ -11068,13 +11068,6 @@ __metadata:
     has-symbols: "npm:^1.1.0"
     which-boxed-primitive: "npm:^1.1.1"
   checksum: 10c0/7dbd35ab02b0e05fe07136c72cb9355091242455473ec15057c11430129bab38b7b3624019b8778d02a881c13de44d63cd02d122ee782fb519e1de7775b5b982
-  languageName: node
-  linkType: hard
-
-"undici-types@npm:~6.21.0":
-  version: 6.21.0
-  resolution: "undici-types@npm:6.21.0"
-  checksum: 10c0/c01ed51829b10aa72fc3ce64b747f8e74ae9b60eafa19a7b46ef624403508a54c526ffab06a14a26b3120d055e1104d7abe7c9017e83ced038ea5cf52f8d5e04
   languageName: node
   linkType: hard
 
