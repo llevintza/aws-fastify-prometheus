@@ -25,12 +25,12 @@ jobs:
 
       - name: Get PR metadata
         id: pr-metadata
-        uses: dependabot/fetch-metadata@v1
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
       - name: Wait for CI checks to complete
-        uses: lewagon/wait-on-check-action@v1.3.3
+        uses: lewagon/wait-on-check-action@v1.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           check-name: 'CI/CD'
@@ -39,7 +39,7 @@ jobs:
           allowed-conclusions: success,neutral,skipped
 
       - name: Wait for security checks to complete
-        uses: lewagon/wait-on-check-action@v1.3.3
+        uses: lewagon/wait-on-check-action@v1.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           check-name: 'Security Analysis'
@@ -48,7 +48,7 @@ jobs:
           allowed-conclusions: success,neutral,skipped
 
       - name: Wait for code quality checks to complete
-        uses: lewagon/wait-on-check-action@v1.3.3
+        uses: lewagon/wait-on-check-action@v1.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           check-name: 'Code Quality'
