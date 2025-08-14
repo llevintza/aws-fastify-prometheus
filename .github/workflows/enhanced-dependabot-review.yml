@@ -26,7 +26,7 @@ jobs:
 
       - name: Get Dependabot metadata
         id: dependabot-metadata
-        uses: dependabot/fetch-metadata@v1
+        uses: dependabot/fetch-metadata@v2
         with:
           github-token: "${{ secrets.GITHUB_TOKEN }}"
 
@@ -77,7 +77,7 @@ jobs:
           fi
 
       - name: Wait for all required checks
-        uses: lewagon/wait-on-check-action@v1.3.3
+        uses: lewagon/wait-on-check-action@v1.4.0
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           running-workflow-name: 'Enhanced Dependabot Auto-Review'
