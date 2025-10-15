@@ -2564,12 +2564,12 @@ __metadata:
   linkType: hard
 
 "@smithy/property-provider@npm:^4.0.4":
-  version: 4.0.4
-  resolution: "@smithy/property-provider@npm:4.0.4"
+  version: 4.2.2
+  resolution: "@smithy/property-provider@npm:4.2.2"
   dependencies:
-    "@smithy/types": "npm:^4.3.1"
+    "@smithy/types": "npm:^4.7.1"
     tslib: "npm:^2.6.2"
-  checksum: 10c0/c370efbb43ab01fb6050fbf4c231bbe2fb7d660256adeee40c0c4c14b7af1b9b75c36f6924aeacdd2885fad1aaf0655047cafe5f0d22f5e371cbd25ff2f04b27
+  checksum: 10c0/14b49afd41b9c490b8568716aceb0e6e02449a8a3008b11634d593bd0013081296eb8768fd51ef7bf35e5d0cb248895bbfa73a8b15afa6bcf2fb8d001b38149d
   languageName: node
   linkType: hard
 
@@ -2660,6 +2660,15 @@ __metadata:
   dependencies:
     tslib: "npm:^2.6.2"
   checksum: 10c0/8b350562b9ed4ff97465025b4ae77a34bb07b9d47fb6f9781755aac9401b0355a63c2fef307393e2dae3fa0277149dd7d83f5bc2a63d4ad3519ea32fd56b5cda
+  languageName: node
+  linkType: hard
+
+"@smithy/types@npm:^4.7.1":
+  version: 4.7.1
+  resolution: "@smithy/types@npm:4.7.1"
+  dependencies:
+    tslib: "npm:^2.6.2"
+  checksum: 10c0/5e5703d99bf814d78b636a7652229c644759424523b1877d16a61007de250ced27bb119ab37bb0fb31d973ba590717dac03ff1827d2a45a075b0bb037066c90b
   languageName: node
   linkType: hard
 
