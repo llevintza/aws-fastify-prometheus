@@ -57,7 +57,7 @@ git push origin feature/new-metrics
 
 ### Prerequisites
 
-- **Node.js**: Version 20.0.0 or higher (we recommend using the latest LTS version)
+- **Node.js**: Version 22.0.0 or higher (we recommend using the latest LTS version)
 - **Yarn**: Version 4.6.0 (managed via Corepack)
 
 ### Getting Started
