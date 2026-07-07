@@ -54,7 +54,7 @@
   },
   "homepage": "https://github.com/llevintza/aws-fastify-prometheus#readme",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "packageManager": "yarn@4.6.0",
   "peerDependencies": {
