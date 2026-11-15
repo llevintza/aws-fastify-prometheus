@@ -298,7 +298,7 @@ await fastify.register(fastifyPrometheus, {
 ### CI/CD Pipeline Flow
 
 1. **Code Quality Checks**: Linting, formatting, type checking
-2. **Testing**: Unit tests across Node.js versions (20, 22)
+2. **Testing**: Unit tests across Node.js versions (22, 24, 26)
 3. **Build**: TypeScript compilation
 4. **Version Analysis**: Semantic-release analyzes commits
 5. **Version Bump**: Automatic version calculation
@@ -706,7 +706,7 @@ git push  # 📦 Creates 2.0.0
 ### CI/CD Pipeline
 
 1. **Code Quality Checks**: Linting, formatting, type checking
-2. **Testing**: Unit tests across Node.js versions (20, 22)
+2. **Testing**: Unit tests across Node.js versions (22, 24, 26)
 3. **Build**: TypeScript compilation
 4. **Release**: Semantic release with automated versioning
 5. **Publishing**: Automatic publishing to GitHub Packages

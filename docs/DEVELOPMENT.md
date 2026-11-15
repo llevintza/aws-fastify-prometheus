@@ -4,7 +4,7 @@ This document provides information for developers who want to contribute to or w
 
 ## Prerequisites
 
-- **Node.js**: Version 22.0.0 or higher (latest LTS recommended)
+- **Node.js**: Version 22.0.0 or higher (latest LTS recommended). CI tests Node.js 22, 24, and 26.
 - **Yarn**: Version 4.6.0 (managed via Corepack)
 - **Git**: For version control and contributing
 
