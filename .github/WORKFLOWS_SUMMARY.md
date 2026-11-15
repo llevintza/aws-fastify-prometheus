@@ -15,7 +15,7 @@ This document provides an overview of all GitHub Actions workflows implemented f
 3. **Lint & Format Check** - ESLint and Prettier validation with circular dependency detection
 4. **Security Audit** - Dependency vulnerability scanning
 5. **Build Project** - Compiles TypeScript and validates outputs
-6. **Test Suite** - Runs tests on Node.js 20 & 22 with coverage validation
+6. **Test Suite** - Runs tests on Node.js 22, 24, and 26 with coverage validation
 7. **Package Validation** - Validates package.json and tests imports
 8. **PR Checks** - Generates comprehensive PR status comments
 9. **Release** - Semantic release on main branch pushes
@@ -23,7 +23,7 @@ This document provides an overview of all GitHub Actions workflows implemented f
 
 #### Key Features:
 - ✅ Parallel job execution for speed
-- ✅ Multi-Node.js version testing (20, 22)
+- ✅ Multi-Node.js version testing (22, 24, 26)
 - ✅ Coverage threshold enforcement (40% branches, 24% functions, 45% lines/statements)
 - ✅ Artifact storage for build outputs and test results
 - ✅ PR status comments with detailed results
@@ -100,9 +100,10 @@ This document provides an overview of all GitHub Actions workflows implemented f
 3. ✅ Lint & Format Check
 4. ✅ Security Audit
 5. ✅ Build Project
-6. ✅ Test Suite (Node.js 20)
-7. ✅ Test Suite (Node.js 22)
-8. ✅ Package Validation
+6. ✅ Test Suite (Node.js 22)
+7. ✅ Test Suite (Node.js 24)
+8. ✅ Test Suite (Node.js 26)
+9. ✅ Package Validation
 
 ### Coverage Requirements:
 - **Lines:** 45% minimum
