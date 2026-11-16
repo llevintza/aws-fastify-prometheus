@@ -22,14 +22,8 @@ A comprehensive Fastify plugin for collecting and exporting Prometheus metrics w
 ## Installation
 
 ```bash
-# Install the latest stable version (recommended for production)
+# Install the latest stable version (published from main)
 npm install @llevintza/fastify-prometheus-metrics
-
-# Install beta version (for testing upcoming features)
-npm install @llevintza/fastify-prometheus-metrics@beta
-
-# Install alpha version (for testing cutting-edge features)
-npm install @llevintza/fastify-prometheus-metrics@alpha
 
 # Or with other package managers
 yarn add @llevintza/fastify-prometheus-metrics
@@ -48,32 +42,11 @@ echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
 echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc
 ```
 
-### Release Channels
+### Releases
 
-This package follows a structured release strategy with automatic versioning:
+Stable versions publish automatically when changes land on `main` (CI `Release` job → `yarn semantic-release` → GitHub Packages). `.releaserc.js` still lists `feature/*` (alpha) and `release/*` (beta), but **CI does not publish those channels today**.
 
-| Branch Pattern | Release Type | Example Version | Use Case |
-|----------------|--------------|-----------------|----------|
-| `main` | **Stable** | `1.0.0` | Production environments |
-| `release/*` | **Beta** | `1.1.0-beta.1` | Pre-release testing |
-| `feature/*` | **Alpha** | `1.1.0-alpha.2` | Feature development |
-
-**Installation Examples:**
-```bash
-# Production (stable)
-npm install @llevintza/fastify-prometheus-metrics
-
-# Testing upcoming release
-npm install @llevintza/fastify-prometheus-metrics@beta
-
-# Testing new features
-npm install @llevintza/fastify-prometheus-metrics@alpha
-
-# Specific version
-npm install @llevintza/fastify-prometheus-metrics@1.0.0-beta.2
-```
-
-> **📖 Documentation**: See our [Branching Strategy Guide](./docs/BRANCHING_STRATEGY.md) for complete details on versioning, commit conventions, and release workflow.
+> **📖 Documentation**: See the [Release Guide](./docs/RELEASE_GUIDE.md) and [Branching Strategy](./docs/BRANCHING_STRATEGY.md).
 
 ## Quick Start
 
@@ -456,35 +429,16 @@ This project is licensed under the MIT License - see the [LICENSE](./LICENSE) fi
 
 ## Documentation
 
-### 📚 Comprehensive Guides
-- 📖 [Release Guide](./docs/RELEASE_GUIDE.md) - Step-by-step instructions for creating releases
-- 🌿 [Branching Strategy](./docs/BRANCHING_STRATEGY.md) - Complete branching and release workflow
-- �‍💻 [Development Guide](./docs/DEVELOPMENT.md) - Setup and development instructions
-- 🤝 [Contributing Guidelines](./CONTRIBUTING.md) - How to contribute to the project
-- 🔒 [Security Analysis](./docs/SECURITY_ANALYSIS.md) - Security vulnerability analysis and mitigation
+### Guides
+- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire from `main`
+- [Branching Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based flow and commit conventions
+- [Development Guide](./docs/DEVELOPMENT.md)
+- [Contributing Guidelines](./CONTRIBUTING.md)
+- [Security Analysis](./docs/SECURITY_ANALYSIS.md)
 
-### 🚀 Release Types
-- **Alpha** (`@alpha`): Feature development and early testing
-- **RC** (`@rc`): Pre-beta testing and validation  
-- **Beta** (`@beta`): Release candidates for final testing
-- **Next** (`@next`): Major version development with breaking changes
-- **Stable** (default): Production-ready releases
-- **Hotfix** (`@hotfix`): Emergency fixes for critical issues
-
-### 📦 Installation Examples
-```bash
-# Stable release (production)
-npm install @llevintza/fastify-prometheus-metrics
-
-# Test new features (alpha)  
-npm install @llevintza/fastify-prometheus-metrics@alpha
-
-# Test release candidates (beta)
-npm install @llevintza/fastify-prometheus-metrics@beta
-
-# Preview next major version (next)
-npm install @llevintza/fastify-prometheus-metrics@next
-```
+### Releases
+- **Stable** (default): published from `main` by CI
+- **Alpha / beta**: listed in `.releaserc.js` for `feature/*` / `release/*` but **not published by CI today** (no `@rc`, `@next`, or `@hotfix` channels)
 
 ## Support
 

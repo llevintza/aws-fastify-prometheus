@@ -48,17 +48,20 @@ This document provides an overview of all GitHub Actions workflows implemented f
 ### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
 
 **Triggers:** `workflow_run` after the `CI/CD` workflow completes successfully on a pull request
-**Purpose:** Approve and auto-merge Dependabot PRs once CI is green
+**Purpose:** Approve and auto-merge confident stack-bottom Dependabot patches once CI is green
 
 #### Features:
 - ⏳ **CI Gate** - Runs only when `CI/CD` concluded `success` for a PR
-- ✅ **Auto-Approval** - Approves with `GH_TOKEN` (satisfies code-owner review rules)
-- 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for every Dependabot PR after CI Success
+- 📚 **Stack Gate** - Auto-merge only when the PR base is `main` (upper stacked PRs wait for restack)
+- ✅ **Auto-Approval** - Approves confident patch updates with `GH_TOKEN`
+- 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for confident patches only
+- 💬 **Manual Review Comments** - Flags majors / held contract-risk / denylisted groups
 - 🔒 **No `pull_request_target`** - Uses `workflow_run` (default-branch context) instead
 
 #### Rule:
-- ✅ **CI green + no conflicts ⇒ auto-merge** for all Dependabot PRs
-- Auto-merge stays queued until the branch is mergeable; conflicts block merge until resolved
+- ✅ **CI green + base `main` + confident patch ⇒ auto-merge**
+- ❌ Manual review for majors, `fastify-ecosystem-major`, `aws-ecosystem`, `security-critical`, prom-client majors, `@prometheus-io/client`
+- Auto-merge stays queued until the PR is mergeable; conflicts block merge until resolved
 
 ---
 

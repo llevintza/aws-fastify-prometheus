@@ -21,12 +21,13 @@ jobs:
     if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
 
     steps:
-      - name: Approve and enable auto-merge
+      - name: Approve and enable auto-merge for confident stack-bottom PRs
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_REPO: ${{ github.repository }}
           HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
           HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
@@ -35,7 +36,8 @@ jobs:
             exit 0
           fi
 
-          pr_json=$(gh pr list --head "$HEAD_BRANCH" --state open --json number,author,mergeable,url --jq '.[0] // empty')
+          pr_json=$(gh pr list --head "$HEAD_BRANCH" --state open \
+            --json number,author,mergeable,baseRefName,title,body,url --jq '.[0] // empty')
           if [ -z "$pr_json" ]; then
             echo "No open PR for branch $HEAD_BRANCH; skipping."
             exit 0
@@ -44,6 +46,9 @@ jobs:
           pr_number=$(echo "$pr_json" | jq -r '.number')
           author=$(echo "$pr_json" | jq -r '.author.login')
           mergeable=$(echo "$pr_json" | jq -r '.mergeable')
+          base_ref=$(echo "$pr_json" | jq -r '.baseRefName')
+          pr_title=$(echo "$pr_json" | jq -r '.title // ""')
+          pr_body=$(echo "$pr_json" | jq -r '.body // ""')
 
           # gh may report Dependabot as dependabot, dependabot[bot], or app/dependabot
           case "$author" in
@@ -55,23 +60,103 @@ jobs:
           esac
 
           echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
-          echo "Mergeable: $mergeable"
+          echo "Base: $base_ref  Mergeable: $mergeable"
+
+          # Stack gate: only the bottom stacked PR (base == main) may auto-merge.
+          # Upper stacked PRs wait until restack retargets them onto main.
+          if [ "$base_ref" != "main" ]; then
+            echo "PR #$pr_number base is '$base_ref' (not main); skipping auto-merge for stacked upper PR."
+            exit 0
+          fi
+
+          # Parse Dependabot update-types from the PR body trailer (highest wins).
+          update_type="unknown"
+          if echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-major'; then
+            update_type="version-update:semver-major"
+          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-minor'; then
+            update_type="version-update:semver-minor"
+          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-patch'; then
+            update_type="version-update:semver-patch"
+          fi
+          echo "Detected update_type=$update_type"
+
+          signals="$HEAD_BRANCH $pr_title $pr_body"
+
+          # High-risk / held rows: comment for manual review, do not auto-merge.
+          needs_manual=0
+          if echo "$signals" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client'; then
+            needs_manual=1
+          fi
+          if echo "$signals" | grep -Eiq 'prom-client' && \
+             { [ "$update_type" = "version-update:semver-major" ] || echo "$signals" | grep -Eiq 'major|breaking'; }; then
+            needs_manual=1
+          fi
+          if echo "$signals" | grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
+            needs_manual=1
+          fi
+          if [ "$update_type" = "version-update:semver-major" ]; then
+            needs_manual=1
+          fi
+
+          if [ "$needs_manual" -eq 1 ]; then
+            comment_message="🔍 **Manual Review Required**
+
+          This Dependabot update is on \`main\` with green CI, but is not a confident auto-merge row
+          (major / held contract risk / denylisted group).
+
+          **Branch:** \`${HEAD_BRANCH}\`
+          **Update type (from PR body):** ${update_type}
+
+          **Recommended Actions:**
+          1. Review changelogs and contract impact (peer range, engines, scrape/API)
+          2. Merge with an intentional subject if needed, e.g.
+             \`gh pr merge --merge --subject 'feat(deps)!: …' --body \$'BREAKING CHANGE: …'\`
+             (short human body only — never paste the full Dependabot description)
+          3. Leave the default merge subject for confident patches so release analysis can read trailers
+
+          @${REPO_OWNER} please review this PR manually."
+
+            gh pr comment "$pr_number" --body "$comment_message"
+            echo "Manual review requested for PR #$pr_number; not enabling auto-merge."
+            exit 0
+          fi
+
+          # Confident-row: patch only.
+          if [ "$update_type" != "version-update:semver-patch" ]; then
+            echo "Update type '$update_type' is not a confident patch; skipping auto-merge."
+            exit 0
+          fi
+
+          # Extra denylist for production / ecosystem names even on patch metadata.
+          if echo "$signals" | grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem'; then
+            echo "Denylisted dependency signals present; skipping auto-merge."
+            exit 0
+          fi
+          if echo "$signals" | grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' && \
+             ! echo "$signals" | grep -Eiq 'fastify-plugin'; then
+            echo "Denylisted fastify host signals present; skipping auto-merge."
+            exit 0
+          fi
 
           approval_message="🤖 **Automated Approval**
 
-          CI/CD is green. Approving and enabling auto-merge.
+          CI/CD is green and this Dependabot PR is a confident stack-bottom patch.
 
           - **Branch**: \`${HEAD_BRANCH}\`
           - **SHA**: \`${HEAD_SHA}\`
+          - **Base**: \`main\`
+          - **Update type**: \`${update_type}\`
 
-          Merge will complete once the PR is mergeable (no conflicts) and required checks remain green."
+          Enabling auto-merge. Merge subject stays the default so Dependabot trailers
+          remain available to semantic-release analyzeCommits."
 
           if ! gh pr review "$pr_number" --approve --body "$approval_message"; then
             echo "Approve returned non-zero (may already be approved); continuing."
           fi
 
-          # Repo disallows squash; use merge commit. --auto queues until mergeable.
-          if ! gh pr merge "$pr_number" --merge --auto --body "🤖 Auto-merged after CI Success"; then
+          # Repo disallows squash; use merge commit. No --subject (preserve Dependabot trailers).
+          # Keep --body short; never paste the full Dependabot PR body.
+          if ! gh pr merge "$pr_number" --merge --auto --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
             echo "Auto-merge enable returned non-zero; checking PR state..."
             gh pr view "$pr_number" --json state,mergeable,mergeStateStatus,autoMergeRequest
             exit 1

@@ -20,7 +20,7 @@ updates:
       - "bi-weekly-update"
       - "automated"
     versioning-strategy: "auto"
-    rebase-strategy: "auto"
+    rebase-strategy: "disabled"
     
     # Strategic dependency groupings optimized for your project
     groups:
@@ -148,6 +148,50 @@ updates:
           - "prom-client"
         update-types:
           - "major"
+
+      # Catch-all for remaining packages (reduces ungrouped transitive PR fan-out)
+      other-dependencies:
+        patterns:
+          - "*"
+        exclude-patterns:
+          - "fastify"
+          - "@fastify/*"
+          - "fastify-plugin"
+          - "fastify*"
+          - "@aws-sdk/*"
+          - "aws-sdk"
+          - "aws-*"
+          - "@types/node"
+          - "node"
+          - "ts-node"
+          - "eslint"
+          - "@eslint/*"
+          - "eslint-*"
+          - "prettier"
+          - "@prettier/*"
+          - "lint-staged"
+          - "husky"
+          - "@commitlint/*"
+          - "commitlint"
+          - "typescript"
+          - "@typescript-eslint/*"
+          - "ts-*"
+          - "@types/*"
+          - "jest"
+          - "@jest/*"
+          - "jest-*"
+          - "@types/jest"
+          - "ts-jest"
+          - "rimraf"
+          - "semantic-release"
+          - "@semantic-release/*"
+          - "prom-client"
+          - "prometheus-*"
+          - "*-metrics"
+        update-types:
+          - "major"
+          - "minor"
+          - "patch"
     
     # Security and stability rules
     # Note: Dependabot automatically excludes pre-release versions by default
@@ -187,6 +231,7 @@ updates:
       - "github-actions"
       - "automated"
       - "ci"
+    rebase-strategy: "disabled"
     
     groups:
       # Official GitHub Actions

@@ -1,0 +1,75 @@
+# Dependabot Stack / Restack
+#
+# Retargets and rebases open Dependabot PRs into a fixed merge order so they
+# can be merged bottom-up. Runs when Dependabot opens/updates a PR, after a
+# Dependabot PR is closed (including merge → restack remaining), or manually.
+#
+# Required secret: GH_TOKEN
+#   Fine-grained or classic PAT with:
+#     - contents: write (clone + force-push dependabot/* branches with lease)
+#     - pull requests: write (edit base, labels, comments)
+#   Plain GITHUB_TOKEN cannot push to dependabot/* branches in most repos.
+# Fallback (if GH_TOKEN is unset in this environment): XOON_NPM_PUBLISH_TOKEN
+#   when that token also has the scopes above — prefer a dedicated GH_TOKEN.
+#
+# Does not rewrite Dependabot commit messages/contents; only rebases and
+# retargets PR bases.
+
+name: Dependabot Stack
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, closed]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Print planned stack actions without mutating"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+concurrency:
+  group: dependabot-stack-${{ github.repository }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  stack-dependabot-prs:
+    name: Stack Dependabot PRs
+    runs-on: ubuntu-latest
+    # Dependabot author on PR events; always run for manual dispatch
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.pull_request.user.login == 'dependabot[bot]')
+
+    steps:
+      - name: Checkout workflow scripts
+        uses: actions/checkout@v4
+        with:
+          # pull_request_target checks out the base ref by default (trusted).
+          # Script lives on the default branch / this workflow's ref.
+          path: .stack-src
+
+      - name: Stack / restack Dependabot PRs
+        env:
+          # Prefer GH_TOKEN; fall back to XOON_NPM_PUBLISH_TOKEN when it has
+          # contents:write + pull-requests:write + push to dependabot/*.
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.XOON_NPM_PUBLISH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BASE_BRANCH: main
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run || 'false' }}
+        run: |
+          set -euo pipefail
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "ERROR: Neither secrets.GH_TOKEN nor secrets.XOON_NPM_PUBLISH_TOKEN is set." >&2
+            echo "Need a PAT with contents:write, pull-requests:write, and push to dependabot/*." >&2
+            exit 1
+          fi
+          chmod +x .stack-src/.github/scripts/stack-dependabot-prs.sh
+          .stack-src/.github/scripts/stack-dependabot-prs.sh
