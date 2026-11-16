@@ -82,6 +82,7 @@ jobs:
         if: steps.risk.outputs.risk_level == 'high' || steps.metadata.outputs.update-type == 'version-update:semver-major'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
@@ -117,6 +118,7 @@ jobs:
            steps.metadata.outputs.update-type == 'version-update:semver-minor')
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
@@ -155,10 +157,12 @@ jobs:
           !contains(steps.metadata.outputs.dependency-group, 'security-critical')
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
         run: |
           set -euo pipefail
 
           echo "Auto-merging safe patch update for: $DEPENDENCY_NAMES"
-          gh pr merge "$PR_NUMBER" --squash --auto --body "🤖 Auto-merged safe patch update"
+          # Repo disallows squash merges; use merge + auto.
+          gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged safe patch update"
