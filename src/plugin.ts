@@ -127,7 +127,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   });
 
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
-    const route = request.routerPath ?? request.url;
+    const route = request.routeOptions.url ?? request.url;
 
     // Skip excluded routes
     if (
@@ -646,6 +646,6 @@ declare module 'fastify' {
 }
 
 export default fp(fastifyPrometheusPlugin, {
-  fastify: '4.x',
+  fastify: '5.x',
   name: 'fastify-prometheus-metrics',
 });
