@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # Stack open Dependabot PRs into a fixed merge order (bottom → top).
 #
+# Two steps:
+#   1. Rebase each PR onto the one below it and chain the PR bases.
+#   2. Register the chain as a native GitHub stack with `gh stack link`.
+#      Chained bases alone are NOT a stack in the GitHub UI. The `stacked`
+#      label is only added once step 2 succeeds.
+#
+# Requires the gh-stack extension (`gh extension install github/gh-stack`).
+#
 # Required env:
 #   GH_TOKEN  — PAT with contents:write, pull-requests:write, and ability to
 #               push dependabot/* branches (GITHUB_TOKEN usually cannot).
@@ -14,6 +22,8 @@
 #   0 — stack applied (or nothing to do / dry-run)
 #   1 — fatal error (auth, git, unexpected)
 #   2 — rebase conflict; conflicting PR commented, chain mutation stopped
+#       (PRs below the conflict are still linked into the stack)
+#   3 — `gh stack link` failed; bases are chained but no native stack exists
 
 set -euo pipefail
 
@@ -241,6 +251,11 @@ for rec in "${SORTED[@]}"; do
   echo "  #$num  group=${group}  head=${head}  current_base=${base}"
 done
 
+if [[ "$DRY_RUN" != "true" ]] && ! gh stack --help >/dev/null 2>&1; then
+  echo "ERROR: gh-stack extension not installed (gh extension install github/gh-stack)." >&2
+  exit 1
+fi
+
 ensure_label "$STACK_LABEL"
 
 # Worktree for rebases
@@ -261,6 +276,7 @@ git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 PREV_BRANCH="$BASE_BRANCH"
 CONFLICT_HIT=0
 CHAIN_LINES=()
+STACK_PRS=()
 i=0
 total=${#SORTED[@]}
 
@@ -273,6 +289,7 @@ for rec in "${SORTED[@]}"; do
   if [[ "$DRY_RUN" == "true" ]]; then
     echo "[dry-run] would rebase $head onto $PREV_BRANCH, force-push --force-with-lease, set base=$PREV_BRANCH"
     CHAIN_LINES+=("${i}. #${num} (${group}) → base \`${PREV_BRANCH}\`")
+    STACK_PRS+=("$num")
     PREV_BRANCH="$head"
     continue
   fi
@@ -318,10 +335,29 @@ for rec in "${SORTED[@]}"; do
     echo "Base already ${PREV_BRANCH} for #$num"
   fi
 
-  add_stacked_label "$num"
+  STACK_PRS+=("$num")
   CHAIN_LINES+=("${i}. #${num} (${group}) → base \`${PREV_BRANCH}\`")
 
   PREV_BRANCH="$head"
+done
+
+# Register the chain as a native GitHub stack (bottom → top). Linking is
+# idempotent: an up-to-date stack is a no-op and an existing stack is extended.
+# A stack needs at least two PRs; a lone PR just stays based on the trunk.
+if [[ ${#STACK_PRS[@]} -ge 2 ]]; then
+  echo ""
+  echo "Linking native GitHub stack: ${STACK_PRS[*]}"
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[dry-run] would run: gh stack link --base $BASE_BRANCH ${STACK_PRS[*]}"
+  elif ! gh stack link --base "$BASE_BRANCH" "${STACK_PRS[@]}" </dev/null; then
+    echo "ERROR: gh stack link failed. Bases are chained, but the PRs are NOT a native stack." >&2
+    echo "If the order changed against an existing stack, unstack it (gh stack unstack <stack-number>) and re-run this workflow." >&2
+    exit 3
+  fi
+fi
+
+for num in "${STACK_PRS[@]}"; do
+  add_stacked_label "$num"
 done
 
 # Comment chain order on successfully stacked PRs (and bottom even if alone)
@@ -331,7 +367,7 @@ ${MARKER_BEGIN}
 
 $(printf '%s\n' "${CHAIN_LINES[@]}")
 
-Bottom PR stays based on \`${BASE_BRANCH}\`. Upper PRs rebase onto the previous head and retarget their base accordingly. After a bottom merge, this workflow restacks remaining open Dependabot PRs.
+These PRs form a native GitHub stack. Bottom PR stays based on \`${BASE_BRANCH}\`. Upper PRs rebase onto the previous head and retarget their base accordingly. After a bottom merge, this workflow restacks remaining open Dependabot PRs.
 
 Re-run via **Actions → Dependabot Stack → Run workflow** if needed.
 ${MARKER_END}
