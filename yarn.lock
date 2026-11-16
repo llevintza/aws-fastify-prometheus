@@ -9240,9 +9240,9 @@ __metadata:
   linkType: hard
 
 "secure-json-parse@npm:^4.0.0":
-  version: 4.0.0
-  resolution: "secure-json-parse@npm:4.0.0"
-  checksum: 10c0/1a298cf00e1de91e833cee5eb406d6e77fb2f7eca9bef3902047d49e7f5d3e6c21b5de61ff73466c831e716430bfe87d732a6e645a7dabb5f1e8a8e4d3e15eb4
+  version: 4.1.1
+  resolution: "secure-json-parse@npm:4.1.1"
+  checksum: 10c0/a34c69bc42a9112213f6c79fd9ab227396015b1f3c788fc18b66a8f00f285cfbba4e3b2ca9b8b202ff1268a85fbd92a7d6114f8164ea29a45330d5636db7440f
   languageName: node
   linkType: hard
 
