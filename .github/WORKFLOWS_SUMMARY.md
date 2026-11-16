@@ -47,14 +47,14 @@ This document provides an overview of all GitHub Actions workflows implemented f
 
 ### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
 
-**Triggers:** Dependabot pull requests (opened, synchronize, reopened, ready_for_review) via `pull_request_target`
+**Triggers:** `workflow_run` after the `CI/CD` workflow completes successfully on a pull request
 **Purpose:** Approve and auto-merge Dependabot PRs once CI is green
 
 #### Features:
-- ⏳ **CI Gate** - Waits for the `CI Success` check
+- ⏳ **CI Gate** - Runs only when `CI/CD` concluded `success` for a PR
 - ✅ **Auto-Approval** - Approves with `GH_TOKEN` (satisfies code-owner review rules)
 - 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for every Dependabot PR after CI Success
-- 🔒 **No PR code execution** - Does not checkout or run untrusted PR code
+- 🔒 **No `pull_request_target`** - Uses `workflow_run` (default-branch context) instead
 
 #### Rule:
 - ✅ **CI green + no conflicts ⇒ auto-merge** for all Dependabot PRs
