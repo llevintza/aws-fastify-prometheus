@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          # TruffleHog needs the full history to diff the pushed/PR commit range.
+          fetch-depth: 0
 
       - name: Enable Corepack
         run: corepack enable
@@ -75,9 +78,10 @@ jobs:
       - name: Check for secrets in code
         uses: trufflesecurity/trufflehog@main
         with:
+          # No base/head: the action derives the range from the event
+          # (push: before..after, PR: base..head, schedule: full history).
+          # Hard-coding base: main made BASE == HEAD on pushes to main.
           path: ./
-          base: main
-          head: HEAD
           extra_args: --debug --only-verified
 
       - name: Analyze security report
