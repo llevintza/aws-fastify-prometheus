@@ -5,9 +5,9 @@ updates:
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 1 * *" # First of the Month at 14:00 UTC
-      timezone: "UTC"
-    open-pull-requests-limit: 25
+      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      timezone: "America/New_York"
+    open-pull-requests-limit: 50
     assignees:
       - "llevintza"
     commit-message:
@@ -175,8 +175,8 @@ updates:
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 * * 1,3" # Monday and Wednesday at 09:00 UTC
-      timezone: "UTC"
+      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      timezone: "America/New_York"
     open-pull-requests-limit: 10
     assignees:
       - "llevintza"
