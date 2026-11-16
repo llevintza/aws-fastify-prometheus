@@ -45,23 +45,23 @@ This document provides an overview of all GitHub Actions workflows implemented f
 
 ---
 
-### 🤖 Dependabot Automation (`auto-approve-dependabot.yml`, `enhanced-dependabot-review.yml`)
+### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
 
-**Triggers:** Dependabot pull requests (opened, synchronize, reopened)
-**Purpose:** Automated review and approval of dependency updates
+**Triggers:** Dependabot pull requests (opened, synchronize, reopened, ready_for_review) via `pull_request_target`
+**Purpose:** Automated review, approval, and merge of safe dependency updates
 
 #### Features:
-- 🔍 **Smart Security Analysis** - Scans for critical/high severity vulnerabilities
-- 🎯 **Risk Assessment** - Evaluates dependency risk level and update type
-- ✅ **Auto-Approval** - Approves safe patch and minor updates automatically
-- 🔄 **Auto-Merge** - Merges low-risk patch updates without manual intervention
-- 💬 **Intelligent Comments** - Provides detailed approval reasoning or manual review requests
-- ⚠️ **Manual Review Triggers** - Flags major updates and high-risk dependencies
+- 🎯 **Risk Assessment** - Evaluates dependency names, groups, and update type
+- ⏳ **CI Gate** - Waits only for the `CI Success` check before approving/merging
+- ✅ **Auto-Approval** - Approves safe patch and minor updates with `GH_TOKEN`
+- 🔄 **Auto-Merge** - Enables auto-merge for low-risk patch updates only
+- 💬 **Manual Review Comments** - Flags high-risk / major / security-critical updates
+- 🔒 **No PR code execution** - Does not checkout or run untrusted PR code
 
 #### Safety Rules:
-- ✅ Auto-approve: Patch/minor updates with no critical vulnerabilities
-- ✅ Auto-merge: Patch updates only for low-risk dependencies
-- ❌ Manual review: Major updates, high-risk deps, security vulnerabilities
+- ✅ Auto-approve: Patch/minor updates that are not high-risk after `CI Success`
+- ✅ Auto-merge: Low-risk patch updates only (excludes `fastify`, `@aws-sdk`, `security-critical`)
+- ❌ Manual review: Major updates, high-risk deps, and `security-critical` groups
 
 ---
 
