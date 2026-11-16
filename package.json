@@ -1,6 +1,6 @@
 {
   "name": "@llevintza/fastify-prometheus-metrics",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "A comprehensive Fastify plugin for Prometheus metrics collection with AWS CloudWatch integration",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -27,7 +27,7 @@
     "audit:summary": "yarn npm audit --all --recursive --json | jq '.vulnerabilities | length' || echo 'jq not available'",
     "security": "yarn audit",
     "security:analyze": "./scripts/security-check.sh",
-    "prepare": "husky install",
+    "prepare": "node .husky/install.mjs",
     "prepublishOnly": "yarn clean && yarn build && yarn test",
     "semantic-release": "semantic-release"
   },
@@ -83,6 +83,7 @@
     "jest": "^30.1.3",
     "jest-junit": "^17.0.0",
     "lint-staged": "^17.6.0",
+    "madge": "^8.0.0",
     "prettier": "^3.1.0",
     "rimraf": "^6.0.1",
     "semantic-release": "^25.0.9",
