@@ -197,10 +197,12 @@ updates:
     # Note: Dependabot automatically excludes pre-release versions by default
     # unless specifically configured to include them
     
-    # Uncomment and customize ignore rules as needed:
-    # ignore:
-    #   - dependency-name: "package-name"
-    #     versions: ["4.x", "5.0.0-beta.1"]
+    ignore:
+      # Preset v10 needs conventional-changelog-writer@9; semantic-release 25
+      # (release-notes-generator 14 / commit-analyzer 13) still ships writer@8.
+      # Lift this once semantic-release moves to writer@9.
+      - dependency-name: "conventional-changelog-conventionalcommits"
+        update-types: ["version-update:semver-major"]
     
     # Special handling for critical packages (let automation handle these carefully)
     # Major version updates for core framework will be grouped but reviewed carefully
