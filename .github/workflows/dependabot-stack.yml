@@ -12,8 +12,9 @@
 # Fallback (if GH_TOKEN is unset in this environment): XOON_NPM_PUBLISH_TOKEN
 #   when that token also has the scopes above — prefer a dedicated GH_TOKEN.
 #
-# Does not rewrite Dependabot commit messages/contents; only rebases and
-# retargets PR bases.
+# Does not rewrite Dependabot commit messages/contents; only rebases,
+# retargets PR bases, and links the chain into a native GitHub stack
+# (`gh stack link`). Chained bases alone do not form a stack.
 
 name: Dependabot Stack
 
@@ -55,6 +56,12 @@ jobs:
           # pull_request_target checks out the base ref by default (trusted).
           # Script lives on the default branch / this workflow's ref.
           path: .stack-src
+
+      - name: Install gh-stack extension
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.XOON_NPM_PUBLISH_TOKEN }}
+        # Pinned: `gh stack link` turns the chained PRs into a native GitHub stack.
+        run: gh extension install github/gh-stack --pin v0.1.0
 
       - name: Stack / restack Dependabot PRs
         env:
