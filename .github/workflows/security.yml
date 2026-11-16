@@ -19,13 +19,13 @@ jobs:
       contents: read
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Enable Corepack
         run: corepack enable
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: 'yarn'
@@ -128,7 +128,7 @@ jobs:
 
       - name: Generate security summary
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
           script: |
@@ -201,7 +201,7 @@ jobs:
             });
 
       - name: Upload security reports
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         if: always()
         with:
           name: security-reports
