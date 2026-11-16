@@ -27,7 +27,7 @@
     "audit:summary": "yarn npm audit --all --recursive --json | jq '.vulnerabilities | length' || echo 'jq not available'",
     "security": "yarn audit",
     "security:analyze": "./scripts/security-check.sh",
-    "prepare": "husky install",
+    "prepare": "node .husky/install.mjs",
     "prepublishOnly": "yarn clean && yarn build && yarn test",
     "semantic-release": "semantic-release"
   },
