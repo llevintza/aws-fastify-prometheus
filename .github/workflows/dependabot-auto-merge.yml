@@ -45,10 +45,14 @@ jobs:
           author=$(echo "$pr_json" | jq -r '.author.login')
           mergeable=$(echo "$pr_json" | jq -r '.mergeable')
 
-          if [ "$author" != "dependabot" ] && [ "$author" != "dependabot[bot]" ]; then
-            echo "PR #$pr_number author is '$author', not Dependabot; skipping."
-            exit 0
-          fi
+          # gh may report Dependabot as dependabot, dependabot[bot], or app/dependabot
+          case "$author" in
+            dependabot|dependabot\[bot\]|app/dependabot) ;;
+            *)
+              echo "PR #$pr_number author is '$author', not Dependabot; skipping."
+              exit 0
+              ;;
+          esac
 
           echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
           echo "Mergeable: $mergeable"
