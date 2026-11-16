@@ -111,8 +111,12 @@ jobs:
 
           gh pr comment "$PR_NUMBER" --body "$comment_message"
 
+      # Stack gate: only the bottom stacked PR (base == main) may auto-approve / auto-merge.
+      # Upper stacked Dependabot PRs still wait for CI and can comment on high risk above,
+      # but must not merge until stacking retargets them onto main.
       - name: Auto-approve safe updates
         if: |
+          github.event.pull_request.base.ref == 'main' &&
           steps.risk.outputs.risk_level != 'high' &&
           (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
            steps.metadata.outputs.update-type == 'version-update:semver-minor')
@@ -148,21 +152,58 @@ jobs:
             echo "Approve step returned non-zero (may already be approved); continuing."
           fi
 
+      # Confident-row auto-merge only (base == main + patch + low risk + denylist).
+      # Do NOT pass --subject with feat(deps)/fix(deps): leave the default
+      # "Merge pull request #N" so analyzeCommits can read Dependabot trailers.
+      # Keep --body short; NEVER paste the full Dependabot PR body (upstream
+      # BREAKING CHANGE lines can false-major the release).
+      #
+      # Human raises on held PRs should encode the release intentionally, e.g.:
+      #   gh pr merge --merge --subject 'feat(deps)!: …' --body $'BREAKING CHANGE: …'
+      # (or fix/feat) with a short BREAKING CHANGE body written by a human,
+      # not Dependabot's description.
       - name: Auto-merge safe patch updates
         if: |
+          github.event.pull_request.base.ref == 'main' &&
           steps.risk.outputs.risk_level == 'low' &&
           steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
           !contains(steps.metadata.outputs.dependency-names, 'fastify') &&
           !contains(steps.metadata.outputs.dependency-names, '@aws-sdk') &&
-          !contains(steps.metadata.outputs.dependency-group, 'security-critical')
+          !contains(steps.metadata.outputs.dependency-names, '@prometheus-io/client') &&
+          !contains(steps.metadata.outputs.dependency-group, 'security-critical') &&
+          !contains(steps.metadata.outputs.dependency-group, 'fastify-ecosystem-major') &&
+          !contains(steps.metadata.outputs.dependency-group, 'aws-ecosystem')
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           set -euo pipefail
 
-          echo "Auto-merging safe patch update for: $DEPENDENCY_NAMES"
+          # Best-effort refuse when title/body/group suggest engines or Fastify peer contract changes
+          if echo "$DEPENDENCY_GROUP $PR_TITLE $PR_BODY" | grep -Eiq \
+            'fastify-ecosystem-major|engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
+            echo "Refusing auto-merge: engines / Fastify peer contract signals in metadata"
+            exit 0
+          fi
+
+          # Refuse @prometheus-io/client always; refuse prom-client when major / misclassified major
+          if echo "$DEPENDENCY_NAMES $DEPENDENCY_GROUP $PR_TITLE" | grep -Eiq '@prometheus-io/client'; then
+            echo "Refusing auto-merge: @prometheus-io/client"
+            exit 0
+          fi
+          if echo "$DEPENDENCY_NAMES $DEPENDENCY_GROUP $PR_TITLE" | grep -Eiq 'prom-client' && \
+             { [ "$UPDATE_TYPE" = "version-update:semver-major" ] || echo "$DEPENDENCY_GROUP $PR_TITLE $PR_BODY" | grep -Eiq 'major|breaking'; }; then
+            echo "Refusing auto-merge: prom-client major / breaking signals"
+            exit 0
+          fi
+
+          echo "Auto-merging confident-row patch update for: $DEPENDENCY_NAMES"
           # Repo disallows squash merges; use merge + auto.
+          # No --subject: default merge subject preserves Dependabot trailers for analyzeCommits.
           gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged safe patch update"
