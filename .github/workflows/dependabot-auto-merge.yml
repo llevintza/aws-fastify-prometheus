@@ -1,0 +1,76 @@
+name: Dependabot Auto-Merge
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: write
+  pull-requests: write
+  checks: read
+  statuses: read
+
+jobs:
+  dependabot-auto-merge:
+    name: Dependabot Auto-Merge
+    runs-on: ubuntu-latest
+    # Use PR author (not event actor) so reopen/label/human sync still runs for Dependabot PRs
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
+
+    steps:
+      - name: Get Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Wait for CI Success
+        uses: lewagon/wait-on-check-action@v1.9.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          check-name: CI Success
+          running-workflow-name: Dependabot Auto-Merge
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+          wait-interval: 30
+          # CI Success is a late needs-gated aggregator; default 60s discovery
+          # timeout exits before that check exists on the ref.
+          checks-discovery-timeout: 1800
+          allowed-conclusions: success
+
+      - name: Approve and enable auto-merge
+        env:
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+        run: |
+          set -euo pipefail
+
+          echo "CI Success passed for Dependabot PR #${PR_NUMBER}"
+          echo "Dependencies: ${DEPENDENCY_NAMES}"
+          echo "Update type: ${UPDATE_TYPE}"
+
+          approval_message="🤖 **Automated Approval**
+
+          CI Success is green. Approving and enabling auto-merge.
+
+          - **Update Type**: ${UPDATE_TYPE}
+          - **Dependencies**: ${DEPENDENCY_NAMES}
+
+          Merge will complete once the PR is mergeable (no conflicts) and required checks remain green."
+
+          # Soft-fail if already approved by this token
+          if ! gh pr review "$PR_NUMBER" --approve --body "$approval_message"; then
+            echo "Approve returned non-zero (may already be approved); continuing."
+          fi
+
+          # Enable GitHub auto-merge. Repo disallows squash; use merge commit.
+          # --auto waits until the branch is mergeable (no conflicts) and checks pass.
+          if ! gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged after CI Success"; then
+            echo "Auto-merge enable returned non-zero; checking PR state..."
+            gh pr view "$PR_NUMBER" --json state,mergeable,mergeStateStatus,autoMergeRequest
+            exit 1
+          fi
+
+          echo "Auto-merge enabled for PR #${PR_NUMBER}"

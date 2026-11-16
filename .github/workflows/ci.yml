@@ -261,7 +261,7 @@ jobs:
 
       - name: Upload coverage to Codecov
         if: matrix.node-version == 26
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           file: ./coverage/lcov.info
           flags: unittests
