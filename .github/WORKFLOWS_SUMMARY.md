@@ -48,20 +48,17 @@ This document provides an overview of all GitHub Actions workflows implemented f
 ### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
 
 **Triggers:** Dependabot pull requests (opened, synchronize, reopened, ready_for_review) via `pull_request_target`
-**Purpose:** Automated review, approval, and merge of safe dependency updates
+**Purpose:** Approve and auto-merge Dependabot PRs once CI is green
 
 #### Features:
-- 🎯 **Risk Assessment** - Evaluates dependency names, groups, and update type
-- ⏳ **CI Gate** - Waits only for the `CI Success` check before approving/merging
-- ✅ **Auto-Approval** - Approves safe patch and minor updates with `GH_TOKEN`
-- 🔄 **Auto-Merge** - Enables auto-merge for low-risk patch updates only
-- 💬 **Manual Review Comments** - Flags high-risk / major / security-critical updates
+- ⏳ **CI Gate** - Waits for the `CI Success` check
+- ✅ **Auto-Approval** - Approves with `GH_TOKEN` (satisfies code-owner review rules)
+- 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for every Dependabot PR after CI Success
 - 🔒 **No PR code execution** - Does not checkout or run untrusted PR code
 
-#### Safety Rules:
-- ✅ Auto-approve: Patch/minor updates that are not high-risk after `CI Success`
-- ✅ Auto-merge: Low-risk patch updates only (excludes `fastify`, `@aws-sdk`, `security-critical`)
-- ❌ Manual review: Major updates, high-risk deps, and `security-critical` groups
+#### Rule:
+- ✅ **CI green + no conflicts ⇒ auto-merge** for all Dependabot PRs
+- Auto-merge stays queued until the branch is mergeable; conflicts block merge until resolved
 
 ---
 
