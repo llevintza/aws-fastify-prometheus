@@ -7,7 +7,7 @@ updates:
       interval: "cron"
       cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
       timezone: "America/New_York"
-    open-pull-requests-limit: 50
+    open-pull-requests-limit: 25
     assignees:
       - "llevintza"
     commit-message:
