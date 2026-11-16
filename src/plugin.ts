@@ -646,6 +646,6 @@ declare module 'fastify' {
 }
 
 export default fp(fastifyPrometheusPlugin, {
-  fastify: '5.x',
+  fastify: '4.x || 5.x',
   name: 'fastify-prometheus-metrics',
 });
