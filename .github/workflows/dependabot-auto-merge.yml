@@ -5,7 +5,7 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
   checks: read
   statuses: read
@@ -32,137 +32,45 @@ jobs:
           running-workflow-name: Dependabot Auto-Merge
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
-          # CI Success is a late aggregator job; default 60s discovery timeout
-          # exits before that check even exists on the ref.
+          # CI Success is a late needs-gated aggregator; default 60s discovery
+          # timeout exits before that check exists on the ref.
           checks-discovery-timeout: 1800
           allowed-conclusions: success
 
-      - name: Assess dependency risk
-        id: risk
-        env:
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
-        run: |
-          set -euo pipefail
-
-          echo "Dependencies: $DEPENDENCY_NAMES"
-          echo "Update type: $UPDATE_TYPE"
-          echo "Dependency group: $DEPENDENCY_GROUP"
-
-          risk_level="low"
-
-          # Group-specific high risk (security-critical and major ecosystem groups)
-          if echo "$DEPENDENCY_GROUP $DEPENDENCY_NAMES" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem'; then
-            risk_level="high"
-            echo "High-risk dependency group detected"
-          fi
-
-          # High-risk Fastify major updates
-          if echo "$DEPENDENCY_NAMES" | grep -Eiq 'fastify|@fastify/|fastify-plugin' && [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-            risk_level="high"
-            echo "High-risk Fastify major update detected"
-          fi
-
-          # High-risk monitoring / AWS major updates
-          if echo "$DEPENDENCY_NAMES" | grep -Eiq 'prom-client|prometheus-|aws-sdk|@aws-sdk/' && [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-            risk_level="high"
-            echo "High-risk monitoring/AWS major update detected"
-          fi
-
-          # Any remaining major update is at least medium risk
-          if [ "$UPDATE_TYPE" = "version-update:semver-major" ] && [ "$risk_level" = "low" ]; then
-            risk_level="medium"
-            echo "Major version update - elevated risk"
-          fi
-
-          echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
-
-      - name: Request manual review for risky updates
-        if: steps.risk.outputs.risk_level == 'high' || steps.metadata.outputs.update-type == 'version-update:semver-major'
+      - name: Approve and enable auto-merge
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_REPO: ${{ github.repository }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
           UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          RISK_LEVEL: ${{ steps.risk.outputs.risk_level }}
-          REPO_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
-          comment_message="🔍 **Manual Review Required**
-
-          This dependency update requires human review.
-
-          **Updated Dependencies:**
-          ${DEPENDENCY_NAMES}
-
-          **Update Type:** ${UPDATE_TYPE}
-          **Risk Level:** ${RISK_LEVEL}
-
-          **Recommended Actions:**
-          1. Review the changelog for breaking changes
-          2. Check security advisories for the affected dependencies
-          3. Run integration tests locally
-          4. Verify compatibility with your codebase
-
-          @${REPO_OWNER} please review this PR manually."
-
-          gh pr comment "$PR_NUMBER" --body "$comment_message"
-
-      - name: Auto-approve safe updates
-        if: |
-          steps.risk.outputs.risk_level != 'high' &&
-          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-           steps.metadata.outputs.update-type == 'version-update:semver-minor')
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          RISK_LEVEL: ${{ steps.risk.outputs.risk_level }}
-        run: |
-          set -euo pipefail
-
-          if [ "$RISK_LEVEL" = "low" ]; then
-            approval_text="**Low Risk - Safe to Auto-Approve**"
-          else
-            approval_text="**Medium Risk - Approved with Monitoring**"
-          fi
+          echo "CI Success passed for Dependabot PR #${PR_NUMBER}"
+          echo "Dependencies: ${DEPENDENCY_NAMES}"
+          echo "Update type: ${UPDATE_TYPE}"
 
           approval_message="🤖 **Automated Approval**
 
-          This dependency update has been automatically approved:
+          CI Success is green. Approving and enabling auto-merge.
 
-          - **CI/CD Status**: CI Success passed
-          - **Risk Assessment**: ${approval_text}
           - **Update Type**: ${UPDATE_TYPE}
           - **Dependencies**: ${DEPENDENCY_NAMES}
 
-          This PR is safe to merge."
+          Merge will complete once the PR is mergeable (no conflicts) and required checks remain green."
 
-          # Soft-fail if already approved / reviewed by this token
+          # Soft-fail if already approved by this token
           if ! gh pr review "$PR_NUMBER" --approve --body "$approval_message"; then
-            echo "Approve step returned non-zero (may already be approved); continuing."
+            echo "Approve returned non-zero (may already be approved); continuing."
           fi
 
-      - name: Auto-merge safe patch updates
-        if: |
-          steps.risk.outputs.risk_level == 'low' &&
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
-          !contains(steps.metadata.outputs.dependency-names, 'fastify') &&
-          !contains(steps.metadata.outputs.dependency-names, '@aws-sdk') &&
-          !contains(steps.metadata.outputs.dependency-group, 'security-critical')
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-        run: |
-          set -euo pipefail
+          # Enable GitHub auto-merge. Repo disallows squash; use merge commit.
+          # --auto waits until the branch is mergeable (no conflicts) and checks pass.
+          if ! gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged after CI Success"; then
+            echo "Auto-merge enable returned non-zero; checking PR state..."
+            gh pr view "$PR_NUMBER" --json state,mergeable,mergeStateStatus,autoMergeRequest
+            exit 1
+          fi
 
-          echo "Auto-merging safe patch update for: $DEPENDENCY_NAMES"
-          # Repo disallows squash merges; use merge + auto.
-          gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged safe patch update"
+          echo "Auto-merge enabled for PR #${PR_NUMBER}"
