@@ -14,7 +14,8 @@ jobs:
   dependabot-auto-merge:
     name: Dependabot Auto-Merge
     runs-on: ubuntu-latest
-    if: github.actor == 'dependabot[bot]'
+    # Use PR author (not event actor) so reopen/label/human sync still runs for Dependabot PRs
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
 
     steps:
       - name: Get Dependabot metadata
