@@ -12,13 +12,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
 
       - name: Enable Corepack
         run: corepack enable
 
       - name: Setup Node.js
-        uses: actions/setup-node@v6
+        uses: actions/setup-node@v7
         with:
           node-version: '26'
           cache: 'yarn'
@@ -60,7 +60,7 @@ jobs:
 
       - name: Create issue for dependency updates
         if: github.event_name == 'schedule'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
           script: |
@@ -113,7 +113,7 @@ jobs:
             }
 
       - name: Upload dependency reports
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v7
         with:
           name: dependency-reports
           path: |
