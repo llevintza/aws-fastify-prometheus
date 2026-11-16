@@ -97,14 +97,10 @@ jobs:
         run: yarn format:check
 
       - name: Check for circular dependencies
-        run: |
-          npx madge --circular --extensions ts src/
-          if [ $? -eq 0 ]; then
-            echo "✅ No circular dependencies found"
-          else
-            echo "❌ Circular dependencies detected"
-            exit 1
-          fi
+        # madge is a locked devDependency: `npx madge` resolved the latest release
+        # and its deps outside yarn.lock, so a package published minutes earlier
+        # (not yet served by the registry) 404'd and failed the job.
+        run: yarn madge --circular --extensions ts src/
 
   # Security audit job
   security-audit:
