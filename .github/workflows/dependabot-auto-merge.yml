@@ -50,10 +50,14 @@ jobs:
           pr_title=$(echo "$pr_json" | jq -r '.title // ""')
           pr_body=$(echo "$pr_json" | jq -r '.body // ""')
 
-          if [ "$author" != "dependabot" ] && [ "$author" != "dependabot[bot]" ]; then
-            echo "PR #$pr_number author is '$author', not Dependabot; skipping."
-            exit 0
-          fi
+          # gh may report Dependabot as dependabot, dependabot[bot], or app/dependabot
+          case "$author" in
+            dependabot|dependabot\[bot\]|app/dependabot) ;;
+            *)
+              echo "PR #$pr_number author is '$author', not Dependabot; skipping."
+              exit 0
+              ;;
+          esac
 
           echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
           echo "Base: $base_ref  Mergeable: $mergeable"
