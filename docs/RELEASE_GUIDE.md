@@ -56,7 +56,7 @@ Summarized ranks (`none` < `patch` < `minor` < `major`; PR/release = max across 
 | **major** | Peer/`fp()` drops a host major or raises floor; `engines.node` moves up; human-confirmed public-contract break |
 | **hold** | `prom-client` `semver-major` or rename to `@prometheus-io/*` — automation publishes **nothing** until a human raise |
 
-Full table and rationale: [reports/Dep aware package semver.md](../reports/Dep%20aware%20package%20semver.md).
+The full decision table is implemented in [`scripts/semantic-release-analyze-commits.js`](../scripts/semantic-release-analyze-commits.js).
 
 ## Stacked Dependabot PRs
 

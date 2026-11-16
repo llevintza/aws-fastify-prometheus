@@ -62,7 +62,7 @@ BREAKING CHANGE: Deprecated endpoints are gone; migrate to the current API."
 
 - Dependabot PRs are stacked; **merge from the bottom** (base `main`); restack is automated.
 - Package version for dep bumps follows the **consumer-contract** table (not the dependency’s own digit). Hold prom-client majors for a human `fix(deps)` / `feat(deps)` / `feat(deps)!:` merge subject.
-- Full rules: [reports/Dep aware package semver.md](../reports/Dep%20aware%20package%20semver.md) and [RELEASE_GUIDE.md](RELEASE_GUIDE.md).
+- Full rules: [RELEASE_GUIDE.md](RELEASE_GUIDE.md) and [`scripts/semantic-release-analyze-commits.js`](../scripts/semantic-release-analyze-commits.js).
 
 ## Branch naming
 
