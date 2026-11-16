@@ -1,209 +1,161 @@
 name: Dependabot Auto-Merge
 
+# Run after the CI/CD workflow finishes successfully. workflow_run uses the
+# default branch context (secrets + write token) without pull_request_target,
+# which GitHub is browning out / blocking on public repos.
 on:
-  pull_request_target:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_run:
+    workflows: ["CI/CD"]
+    types: [completed]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
+  actions: read
   checks: read
-  statuses: read
 
 jobs:
   dependabot-auto-merge:
     name: Dependabot Auto-Merge
     runs-on: ubuntu-latest
-    # Use PR author (not event actor) so reopen/label/human sync still runs for Dependabot PRs
-    if: github.event.pull_request.user.login == 'dependabot[bot]'
+    if: github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'pull_request'
 
     steps:
-      - name: Get Dependabot metadata
-        id: metadata
-        uses: dependabot/fetch-metadata@v3
-        with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Wait for CI Success
-        uses: lewagon/wait-on-check-action@v1.9.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha }}
-          check-name: CI Success
-          running-workflow-name: Dependabot Auto-Merge
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
-          wait-interval: 30
-          # CI Success is a late aggregator job; default 60s discovery timeout
-          # exits before that check even exists on the ref.
-          checks-discovery-timeout: 1800
-          allowed-conclusions: success
-
-      - name: Assess dependency risk
-        id: risk
-        env:
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
-        run: |
-          set -euo pipefail
-
-          echo "Dependencies: $DEPENDENCY_NAMES"
-          echo "Update type: $UPDATE_TYPE"
-          echo "Dependency group: $DEPENDENCY_GROUP"
-
-          risk_level="low"
-
-          # Group-specific high risk (security-critical and major ecosystem groups)
-          if echo "$DEPENDENCY_GROUP $DEPENDENCY_NAMES" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem'; then
-            risk_level="high"
-            echo "High-risk dependency group detected"
-          fi
-
-          # High-risk Fastify major updates
-          if echo "$DEPENDENCY_NAMES" | grep -Eiq 'fastify|@fastify/|fastify-plugin' && [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-            risk_level="high"
-            echo "High-risk Fastify major update detected"
-          fi
-
-          # High-risk monitoring / AWS major updates
-          if echo "$DEPENDENCY_NAMES" | grep -Eiq 'prom-client|prometheus-|aws-sdk|@aws-sdk/' && [ "$UPDATE_TYPE" = "version-update:semver-major" ]; then
-            risk_level="high"
-            echo "High-risk monitoring/AWS major update detected"
-          fi
-
-          # Any remaining major update is at least medium risk
-          if [ "$UPDATE_TYPE" = "version-update:semver-major" ] && [ "$risk_level" = "low" ]; then
-            risk_level="medium"
-            echo "Major version update - elevated risk"
-          fi
-
-          echo "risk_level=$risk_level" >> "$GITHUB_OUTPUT"
-
-      - name: Request manual review for risky updates
-        if: steps.risk.outputs.risk_level == 'high' || steps.metadata.outputs.update-type == 'version-update:semver-major'
+      - name: Approve and enable auto-merge for confident stack-bottom PRs
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          RISK_LEVEL: ${{ steps.risk.outputs.risk_level }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
           REPO_OWNER: ${{ github.repository_owner }}
         run: |
           set -euo pipefail
 
-          comment_message="🔍 **Manual Review Required**
+          if [[ "$HEAD_BRANCH" != dependabot/* ]]; then
+            echo "Not a Dependabot branch ($HEAD_BRANCH); skipping."
+            exit 0
+          fi
 
-          This dependency update requires human review.
+          pr_json=$(gh pr list --head "$HEAD_BRANCH" --state open \
+            --json number,author,mergeable,baseRefName,title,body,url --jq '.[0] // empty')
+          if [ -z "$pr_json" ]; then
+            echo "No open PR for branch $HEAD_BRANCH; skipping."
+            exit 0
+          fi
 
-          **Updated Dependencies:**
-          ${DEPENDENCY_NAMES}
+          pr_number=$(echo "$pr_json" | jq -r '.number')
+          author=$(echo "$pr_json" | jq -r '.author.login')
+          mergeable=$(echo "$pr_json" | jq -r '.mergeable')
+          base_ref=$(echo "$pr_json" | jq -r '.baseRefName')
+          pr_title=$(echo "$pr_json" | jq -r '.title // ""')
+          pr_body=$(echo "$pr_json" | jq -r '.body // ""')
 
-          **Update Type:** ${UPDATE_TYPE}
-          **Risk Level:** ${RISK_LEVEL}
+          if [ "$author" != "dependabot" ] && [ "$author" != "dependabot[bot]" ]; then
+            echo "PR #$pr_number author is '$author', not Dependabot; skipping."
+            exit 0
+          fi
+
+          echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
+          echo "Base: $base_ref  Mergeable: $mergeable"
+
+          # Stack gate: only the bottom stacked PR (base == main) may auto-merge.
+          # Upper stacked PRs wait until restack retargets them onto main.
+          if [ "$base_ref" != "main" ]; then
+            echo "PR #$pr_number base is '$base_ref' (not main); skipping auto-merge for stacked upper PR."
+            exit 0
+          fi
+
+          # Parse Dependabot update-types from the PR body trailer (highest wins).
+          update_type="unknown"
+          if echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-major'; then
+            update_type="version-update:semver-major"
+          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-minor'; then
+            update_type="version-update:semver-minor"
+          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-patch'; then
+            update_type="version-update:semver-patch"
+          fi
+          echo "Detected update_type=$update_type"
+
+          signals="$HEAD_BRANCH $pr_title $pr_body"
+
+          # High-risk / held rows: comment for manual review, do not auto-merge.
+          needs_manual=0
+          if echo "$signals" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client'; then
+            needs_manual=1
+          fi
+          if echo "$signals" | grep -Eiq 'prom-client' && \
+             { [ "$update_type" = "version-update:semver-major" ] || echo "$signals" | grep -Eiq 'major|breaking'; }; then
+            needs_manual=1
+          fi
+          if echo "$signals" | grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
+            needs_manual=1
+          fi
+          if [ "$update_type" = "version-update:semver-major" ]; then
+            needs_manual=1
+          fi
+
+          if [ "$needs_manual" -eq 1 ]; then
+            comment_message="🔍 **Manual Review Required**
+
+          This Dependabot update is on \`main\` with green CI, but is not a confident auto-merge row
+          (major / held contract risk / denylisted group).
+
+          **Branch:** \`${HEAD_BRANCH}\`
+          **Update type (from PR body):** ${update_type}
 
           **Recommended Actions:**
-          1. Review the changelog for breaking changes
-          2. Check security advisories for the affected dependencies
-          3. Run integration tests locally
-          4. Verify compatibility with your codebase
+          1. Review changelogs and contract impact (peer range, engines, scrape/API)
+          2. Merge with an intentional subject if needed, e.g.
+             \`gh pr merge --merge --subject 'feat(deps)!: …' --body \$'BREAKING CHANGE: …'\`
+             (short human body only — never paste the full Dependabot description)
+          3. Leave the default merge subject for confident patches so release analysis can read trailers
 
           @${REPO_OWNER} please review this PR manually."
 
-          gh pr comment "$PR_NUMBER" --body "$comment_message"
+            gh pr comment "$pr_number" --body "$comment_message"
+            echo "Manual review requested for PR #$pr_number; not enabling auto-merge."
+            exit 0
+          fi
 
-      # Stack gate: only the bottom stacked PR (base == main) may auto-approve / auto-merge.
-      # Upper stacked Dependabot PRs still wait for CI and can comment on high risk above,
-      # but must not merge until stacking retargets them onto main.
-      - name: Auto-approve safe updates
-        if: |
-          github.event.pull_request.base.ref == 'main' &&
-          steps.risk.outputs.risk_level != 'high' &&
-          (steps.metadata.outputs.update-type == 'version-update:semver-patch' ||
-           steps.metadata.outputs.update-type == 'version-update:semver-minor')
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          RISK_LEVEL: ${{ steps.risk.outputs.risk_level }}
-        run: |
-          set -euo pipefail
+          # Confident-row: patch only.
+          if [ "$update_type" != "version-update:semver-patch" ]; then
+            echo "Update type '$update_type' is not a confident patch; skipping auto-merge."
+            exit 0
+          fi
 
-          if [ "$RISK_LEVEL" = "low" ]; then
-            approval_text="**Low Risk - Safe to Auto-Approve**"
-          else
-            approval_text="**Medium Risk - Approved with Monitoring**"
+          # Extra denylist for production / ecosystem names even on patch metadata.
+          if echo "$signals" | grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem'; then
+            echo "Denylisted dependency signals present; skipping auto-merge."
+            exit 0
+          fi
+          if echo "$signals" | grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' && \
+             ! echo "$signals" | grep -Eiq 'fastify-plugin'; then
+            echo "Denylisted fastify host signals present; skipping auto-merge."
+            exit 0
           fi
 
           approval_message="🤖 **Automated Approval**
 
-          This dependency update has been automatically approved:
+          CI/CD is green and this Dependabot PR is a confident stack-bottom patch.
 
-          - **CI/CD Status**: CI Success passed
-          - **Risk Assessment**: ${approval_text}
-          - **Update Type**: ${UPDATE_TYPE}
-          - **Dependencies**: ${DEPENDENCY_NAMES}
+          - **Branch**: \`${HEAD_BRANCH}\`
+          - **SHA**: \`${HEAD_SHA}\`
+          - **Base**: \`main\`
+          - **Update type**: \`${update_type}\`
 
-          This PR is safe to merge."
+          Enabling auto-merge. Merge subject stays the default so Dependabot trailers
+          remain available to semantic-release analyzeCommits."
 
-          # Soft-fail if already approved / reviewed by this token
-          if ! gh pr review "$PR_NUMBER" --approve --body "$approval_message"; then
-            echo "Approve step returned non-zero (may already be approved); continuing."
+          if ! gh pr review "$pr_number" --approve --body "$approval_message"; then
+            echo "Approve returned non-zero (may already be approved); continuing."
           fi
 
-      # Confident-row auto-merge only (base == main + patch + low risk + denylist).
-      # Do NOT pass --subject with feat(deps)/fix(deps): leave the default
-      # "Merge pull request #N" so analyzeCommits can read Dependabot trailers.
-      # Keep --body short; NEVER paste the full Dependabot PR body (upstream
-      # BREAKING CHANGE lines can false-major the release).
-      #
-      # Human raises on held PRs should encode the release intentionally, e.g.:
-      #   gh pr merge --merge --subject 'feat(deps)!: …' --body $'BREAKING CHANGE: …'
-      # (or fix/feat) with a short BREAKING CHANGE body written by a human,
-      # not Dependabot's description.
-      - name: Auto-merge safe patch updates
-        if: |
-          github.event.pull_request.base.ref == 'main' &&
-          steps.risk.outputs.risk_level == 'low' &&
-          steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
-          !contains(steps.metadata.outputs.dependency-names, 'fastify') &&
-          !contains(steps.metadata.outputs.dependency-names, '@aws-sdk') &&
-          !contains(steps.metadata.outputs.dependency-names, '@prometheus-io/client') &&
-          !contains(steps.metadata.outputs.dependency-group, 'security-critical') &&
-          !contains(steps.metadata.outputs.dependency-group, 'fastify-ecosystem-major') &&
-          !contains(steps.metadata.outputs.dependency-group, 'aws-ecosystem')
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GH_REPO: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          DEPENDENCY_NAMES: ${{ steps.metadata.outputs.dependency-names }}
-          DEPENDENCY_GROUP: ${{ steps.metadata.outputs.dependency-group }}
-          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
-          PR_TITLE: ${{ github.event.pull_request.title }}
-          PR_BODY: ${{ github.event.pull_request.body }}
-        run: |
-          set -euo pipefail
-
-          # Best-effort refuse when title/body/group suggest engines or Fastify peer contract changes
-          if echo "$DEPENDENCY_GROUP $PR_TITLE $PR_BODY" | grep -Eiq \
-            'fastify-ecosystem-major|engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
-            echo "Refusing auto-merge: engines / Fastify peer contract signals in metadata"
-            exit 0
+          # Repo disallows squash; use merge commit. No --subject (preserve Dependabot trailers).
+          # Keep --body short; never paste the full Dependabot PR body.
+          if ! gh pr merge "$pr_number" --merge --auto --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
+            echo "Auto-merge enable returned non-zero; checking PR state..."
+            gh pr view "$pr_number" --json state,mergeable,mergeStateStatus,autoMergeRequest
+            exit 1
           fi
 
-          # Refuse @prometheus-io/client always; refuse prom-client when major / misclassified major
-          if echo "$DEPENDENCY_NAMES $DEPENDENCY_GROUP $PR_TITLE" | grep -Eiq '@prometheus-io/client'; then
-            echo "Refusing auto-merge: @prometheus-io/client"
-            exit 0
-          fi
-          if echo "$DEPENDENCY_NAMES $DEPENDENCY_GROUP $PR_TITLE" | grep -Eiq 'prom-client' && \
-             { [ "$UPDATE_TYPE" = "version-update:semver-major" ] || echo "$DEPENDENCY_GROUP $PR_TITLE $PR_BODY" | grep -Eiq 'major|breaking'; }; then
-            echo "Refusing auto-merge: prom-client major / breaking signals"
-            exit 0
-          fi
-
-          echo "Auto-merging confident-row patch update for: $DEPENDENCY_NAMES"
-          # Repo disallows squash merges; use merge + auto.
-          # No --subject: default merge subject preserves Dependabot trailers for analyzeCommits.
-          gh pr merge "$PR_NUMBER" --merge --auto --body "🤖 Auto-merged safe patch update"
+          echo "Auto-merge enabled for PR #$pr_number"

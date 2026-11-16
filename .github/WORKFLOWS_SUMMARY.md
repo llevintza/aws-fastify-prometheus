@@ -47,21 +47,21 @@ This document provides an overview of all GitHub Actions workflows implemented f
 
 ### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
 
-**Triggers:** Dependabot pull requests (opened, synchronize, reopened, ready_for_review) via `pull_request_target`
-**Purpose:** Automated review, approval, and merge of safe dependency updates
+**Triggers:** `workflow_run` after the `CI/CD` workflow completes successfully on a pull request
+**Purpose:** Approve and auto-merge confident stack-bottom Dependabot patches once CI is green
 
 #### Features:
-- 🎯 **Risk Assessment** - Evaluates dependency names, groups, and update type
-- ⏳ **CI Gate** - Waits only for the `CI Success` check before approving/merging
-- ✅ **Auto-Approval** - Approves safe patch and minor updates with `GH_TOKEN`
-- 🔄 **Auto-Merge** - Enables auto-merge for low-risk patch updates only
-- 💬 **Manual Review Comments** - Flags high-risk / major / security-critical updates
-- 🔒 **No PR code execution** - Does not checkout or run untrusted PR code
+- ⏳ **CI Gate** - Runs only when `CI/CD` concluded `success` for a PR
+- 📚 **Stack Gate** - Auto-merge only when the PR base is `main` (upper stacked PRs wait for restack)
+- ✅ **Auto-Approval** - Approves confident patch updates with `GH_TOKEN`
+- 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for confident patches only
+- 💬 **Manual Review Comments** - Flags majors / held contract-risk / denylisted groups
+- 🔒 **No `pull_request_target`** - Uses `workflow_run` (default-branch context) instead
 
-#### Safety Rules:
-- ✅ Auto-approve: Patch/minor updates that are not high-risk after `CI Success`
-- ✅ Auto-merge: Low-risk patch updates only (excludes `fastify`, `@aws-sdk`, `security-critical`)
-- ❌ Manual review: Major updates, high-risk deps, and `security-critical` groups
+#### Rule:
+- ✅ **CI green + base `main` + confident patch ⇒ auto-merge**
+- ❌ Manual review for majors, `fastify-ecosystem-major`, `aws-ecosystem`, `security-critical`, prom-client majors, `@prometheus-io/client`
+- Auto-merge stays queued until the PR is mergeable; conflicts block merge until resolved
 
 ---
 
