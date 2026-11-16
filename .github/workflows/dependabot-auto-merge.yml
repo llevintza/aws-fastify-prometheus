@@ -29,8 +29,12 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           check-name: CI Success
+          running-workflow-name: Dependabot Auto-Merge
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           wait-interval: 30
+          # CI Success is a late aggregator job; default 60s discovery timeout
+          # exits before that check even exists on the ref.
+          checks-discovery-timeout: 1800
           allowed-conclusions: success
 
       - name: Assess dependency risk
