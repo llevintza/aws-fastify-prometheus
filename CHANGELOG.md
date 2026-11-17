@@ -1,3 +1,42 @@
+## [3.0.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.4.0...v3.0.0) (2026-11-17)
+
+### ⚠ BREAKING CHANGES
+
+* **plugin:** three plugin defaults change in 3.0.
+- httpMetrics is deep-merged with the defaults. A partial httpMetrics such as
+  { inFlight: { enabled: true } } no longer drops the other default HTTP metrics, and
+  httpMetrics: {} no longer disables them. Set enabled: false on each metric to drop it.
+- routeMatch defaults to 'exact' instead of 'substring': string excludeRoutes and
+  includeRoutes entries must equal the route (query string and fragment ignored for
+  unmatched URLs), so the default '/health' exclusion no longer drops '/healthcare' or
+  '/api/health'. Set routeMatch: 'substring' to restore the 2.x matching. The exported
+  shouldRecord and matchesRoute helpers default to 'exact' too.
+- unmatchedRouteLabel defaults to '__unmatched__': requests that match no route are
+  labelled route="__unmatched__" instead of the raw URL. Set unmatchedRouteLabel: false
+  to restore raw URLs. Its type widens from string to string | false.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Features
+
+* **plugin:** deep-merge httpMetrics and default to exact routes and __unmatched__ ([a61faea](https://github.com/llevintza/aws-fastify-prometheus/commit/a61faea7275b1a63d9d8690ea303b23c9a04ce52)), closes [#245](https://github.com/llevintza/aws-fastify-prometheus/issues/245) [#253](https://github.com/llevintza/aws-fastify-prometheus/issues/253)
+
+### Bug Fixes
+
+* **plugin:** treat null like undefined when merging httpMetrics ([dc4539a](https://github.com/llevintza/aws-fastify-prometheus/commit/dc4539ac871ef3914ed8a8dabf6ebb2582e2b208))
+
+### Miscellaneous Chores
+
+* merge origin/main into feat/v3-defaults ([667cf11](https://github.com/llevintza/aws-fastify-prometheus/commit/667cf115bd2b0c21856b154d628fb02914db72db)), closes [#256](https://github.com/llevintza/aws-fastify-prometheus/issues/256)
+
+### Code Refactoring
+
+* **plugin:** copy arrays when merging httpMetrics so defaults are never aliased ([4cf943d](https://github.com/llevintza/aws-fastify-prometheus/commit/4cf943dcc0bc299ff885c95fb09a4fc59423a823))
+
+### Tests
+
+* **routes:** drop the fragment inject case that light-my-request strips ([efd17ac](https://github.com/llevintza/aws-fastify-prometheus/commit/efd17ac3c29ebcb79f654929592a91a29081e7f3))
+
 ## [2.4.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.3.0...v2.4.0) (2026-11-17)
 
 ### Features
