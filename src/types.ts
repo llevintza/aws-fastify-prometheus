@@ -2,7 +2,7 @@
  * Type definitions for the Fastify Prometheus metrics plugin
  */
 
-import type { FastifyPluginOptions } from 'fastify';
+import type { FastifyPluginOptions, FastifyRequest } from 'fastify';
 import type { register } from 'prom-client';
 
 /**
@@ -105,6 +105,20 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
   defaultLabels?: Record<string, string>;
 
   /**
+   * Serve `/metrics` in OpenMetrics format instead of Prometheus text format 0.0.4.
+   * Switches the content type of the registry in use (the global one unless `register` is set).
+   */
+  openMetrics?: boolean;
+
+  /**
+   * Attach tracing exemplars to the request-duration histogram and request-count counter.
+   * `true` reads `trace_id`/`span_id` from the active OpenTelemetry span (via the optional
+   * `@opentelemetry/api` peer dependency); a function supplies the exemplar labels itself.
+   * Requires `openMetrics: true`.
+   */
+  exemplars?: boolean | ExemplarExtractor;
+
+  /**
    * Prefix prepended verbatim to the HTTP and custom metric names registered by the plugin
    * (for example `'myapp_'`). Context methods such as `incrementCounter` still take the
    * unprefixed name. Default: no prefix.
@@ -135,6 +149,16 @@ export interface RouteFilterConfig {
   /** String matching mode (default `'substring'`) */
   routeMatch?: RouteMatchMode;
 }
+
+/**
+ * Exemplar labels attached to an observation (for example `trace_id` and `span_id`)
+ */
+export type ExemplarLabels = Record<string, string>;
+
+/**
+ * Returns the exemplar labels for a request, or `undefined` to record no exemplar
+ */
+export type ExemplarExtractor = (request: FastifyRequest) => ExemplarLabels | undefined;
 
 /**
  * HTTP metrics configuration

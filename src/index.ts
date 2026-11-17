@@ -9,6 +9,7 @@ export { default as fastifyPrometheusPlugin } from './plugin';
 export { AwsMetricsExporter } from './aws-metrics-exporter';
 export { PrometheusMetrics } from './prometheus-metrics';
 export { MetricsCollector } from './metrics-collector';
+export { otelExemplarExtractor } from './exemplars';
 export { shouldRecord, matchesRoute } from './route-filter';
 
 // Export all types
@@ -28,6 +29,8 @@ export type {
   MetricExportData,
   HttpRequestMetrics,
   FastifyPrometheusContext,
+  ExemplarLabels,
+  ExemplarExtractor,
   RouteMatcher,
   RouteMatchMode,
   RouteFilterConfig,

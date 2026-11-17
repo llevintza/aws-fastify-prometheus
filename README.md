@@ -333,24 +333,113 @@ await fastify.register(fastifyPrometheusPlugin, {
 });
 ```
 
+## Tracing exemplars
+
+Exemplars link a metric sample to the trace that produced it, so a latency spike
+on a dashboard can be opened as an example trace. They are part of the
+[OpenMetrics](https://github.com/prometheus/OpenMetrics/blob/main/specification/OpenMetrics.md#exemplars)
+format, so `exemplars` requires `openMetrics: true`. Registering the plugin with
+`exemplars` but without `openMetrics` throws an error.
+
+```typescript
+import { Registry } from 'prom-client';
+
+await fastify.register(fastifyPrometheusPlugin, {
+  register: new Registry(), // dedicated registry, see the warning below
+  openMetrics: true,
+  exemplars: true,
+});
+```
+
+With `exemplars: true`, the `trace_id` and `span_id` of the active
+[OpenTelemetry](https://opentelemetry.io/docs/languages/js/) span are attached
+to the request-duration histogram (`http_request_duration_ms`) and the request
+counter (`http_requests_total`):
+
+```text
+http_requests_total{method="GET",route="/users",status_code="200"} 1 # {trace_id="0af7651916cd43dd8448eb211c80319c",span_id="b7ad6b7169203331"} 1 1731830400.000
+```
+
+`@opentelemetry/api` is an **optional** peer dependency. Install it (and set up
+the OpenTelemetry SDK) to get exemplars. If it isn't installed, if no span is
+active, or if the span is not sampled, metrics are recorded without an exemplar.
+
+The exemplar is captured in the `onRequest` hook, while the request's span is
+still active (tracing instrumentations often end the span before `onResponse`).
+If nothing is captured there, the extractor runs once more in `onResponse`, so
+labels set by a route handler are also picked up.
+
+Register your OpenTelemetry instrumentation (for example `@fastify/otel`) before
+this plugin, so its request span already exists when this plugin's `onRequest`
+hook runs. Otherwise the exemplar records the parent HTTP server span. If the
+instrumentation wraps each Fastify hook in its own span (as
+`@opentelemetry/instrumentation-fastify` does), `span_id` is that short hook
+span. `trace_id` is the same either way, so the exemplar still links to the
+right trace. If you need the request span's id, read it in a custom extractor.
+
+To supply exemplar labels yourself, pass a function instead of `true`. Return
+`undefined` to skip the exemplar for that request:
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  register: new Registry(),
+  openMetrics: true,
+  exemplars: request => {
+    const traceId = request.headers['x-trace-id'];
+    // Request headers are untrusted input: only accept a well-formed trace id
+    return typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)
+      ? { trace_id: traceId }
+      : undefined;
+  },
+});
+```
+
+Exemplar labels must be a valid OpenMetrics label set: label names match
+`[a-zA-Z_][a-zA-Z0-9_]*`, values are strings, and the names and values together
+are at most 128 characters (UTF-16 code units, as prom-client counts them). An
+invalid label set, or an extractor that throws, is dropped and the observation
+is recorded without an exemplar, so one bad request can't break the `/metrics`
+output.
+
+Only the plugin's own request hooks attach exemplars. The `fastify.prometheus`
+helpers (`incrementCounter`, `observeHistogram`, `recordHttpRequest`) keep
+working on the exemplar-enabled metrics but record without an exemplar.
+
+The built-in extractor is exported as `otelExemplarExtractor` if you want to
+wrap it.
+
+> **Warning:** `openMetrics: true` changes the exposition format of the registry
+> the plugin uses. Without a `register` option that is prom-client's **shared
+> global registry**, so every other consumer of it (another `/metrics` route,
+> `register.metrics()` calls, other libraries) switches to OpenMetrics output
+> too. Pass a dedicated `register: new Registry()` when you enable OpenMetrics.
+> With default options, `/metrics` stays in Prometheus text format 0.0.4.
+
+The `/metrics` response's `Content-Type` always comes from the registry
+(`text/plain; version=0.0.4; charset=utf-8` by default, or
+`application/openmetrics-text; version=1.0.0; charset=utf-8` with
+`openMetrics`).
+
 ## Configuration Options
 
 ### `FastifyPrometheusOptions`
 
-| Option                   | Type                       | Default                       | Description                                                      |
-| ------------------------ | -------------------------- | ----------------------------- | ---------------------------------------------------------------- |
-| `endpoint`               | `string`                   | `'/metrics'`                  | Metrics endpoint path                                            |
-| `enableDefaultMetrics`   | `boolean`                  | `true`                        | Enable Node.js default metrics                                   |
-| `defaultMetricsInterval` | `number`                   | `10000`                       | Default metrics collection interval (ms)                         |
-| `httpMetrics`            | `HttpMetricsConfig`        | See defaults                  | HTTP metrics configuration                                       |
-| `customMetrics`          | `CustomMetricDefinition[]` | `[]`                          | Custom metrics definitions                                       |
-| `awsCloudWatch`          | `AwsExporterConfig`        | `undefined`                   | AWS CloudWatch integration                                       |
-| `excludeRoutes`          | `RouteMatcher[]`           | `['/health', '/healthcheck']` | Routes to exclude (see [Route filtering](#route-filtering))      |
-| `includeRoutes`          | `RouteMatcher[]`           | `undefined`                   | Routes to include (if specified, only these routes are included) |
-| `routeMatch`             | `'substring' \| 'exact'`   | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`       |
-| `unmatchedRouteLabel`    | `string`                   | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset    |
-| `defaultLabels`          | `Record<string, string>`   | `{}`                          | Default labels for all metrics                                   |
-| `prefix`                 | `string`                   | `undefined`                   | Prefix for HTTP and custom metric names (see below)              |
+| Option                   | Type                           | Default                       | Description                                                                                                  |
+| ------------------------ | ------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `endpoint`               | `string`                       | `'/metrics'`                  | Metrics endpoint path                                                                                        |
+| `enableDefaultMetrics`   | `boolean`                      | `true`                        | Enable Node.js default metrics                                                                               |
+| `defaultMetricsInterval` | `number`                       | `10000`                       | Default metrics collection interval (ms)                                                                     |
+| `httpMetrics`            | `HttpMetricsConfig`            | See defaults                  | HTTP metrics configuration                                                                                   |
+| `customMetrics`          | `CustomMetricDefinition[]`     | `[]`                          | Custom metrics definitions                                                                                   |
+| `awsCloudWatch`          | `AwsExporterConfig`            | `undefined`                   | AWS CloudWatch integration                                                                                   |
+| `excludeRoutes`          | `RouteMatcher[]`               | `['/health', '/healthcheck']` | Routes to exclude (see [Route filtering](#route-filtering))                                                  |
+| `includeRoutes`          | `RouteMatcher[]`               | `undefined`                   | Routes to include (if specified, only these routes are included)                                             |
+| `routeMatch`             | `'substring' \| 'exact'`       | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`                                                   |
+| `unmatchedRouteLabel`    | `string`                       | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset                                                |
+| `defaultLabels`          | `Record<string, string>`       | `{}`                          | Default labels for all metrics                                                                               |
+| `prefix`                 | `string`                       | `undefined`                   | Prefix for HTTP and custom metric names (see below)                                                          |
+| `openMetrics`            | `boolean`                      | `false`                       | Serve `/metrics` in OpenMetrics format (switches the registry's content type)                                |
+| `exemplars`              | `boolean \| ExemplarExtractor` | `false`                       | Attach tracing exemplars to the request-duration histogram and request counter; requires `openMetrics: true` |
 
 `prefix` is prepended verbatim to the HTTP, in-flight and custom metric names
 (`'myapp_'` gives `myapp_http_requests_total`). It is not applied to Node.js
