@@ -17,6 +17,7 @@ import type { RegistryContentType } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
 import { resolveExemplarExtractor, safeExtractExemplar } from './exemplars';
+import { mergeHttpMetrics } from './http-metrics-config';
 import { elapsedMs, prefixMetricName } from './metric-utils';
 import { shouldRecord } from './route-filter';
 import type {
@@ -32,6 +33,7 @@ import type {
 
 const DEFAULT_IN_FLIGHT_NAME = 'http_requests_in_flight';
 const DEFAULT_IN_FLIGHT_HELP = 'Number of HTTP requests currently being processed';
+const DEFAULT_UNMATCHED_ROUTE_LABEL = '__unmatched__';
 
 /**
  * Default configuration for HTTP metrics
@@ -83,7 +85,6 @@ const DEFAULT_OPTIONS: Partial<FastifyPrometheusOptions> = {
   endpoint: '/metrics',
   enableDefaultMetrics: true,
   defaultMetricsInterval: 10000,
-  httpMetrics: DEFAULT_HTTP_METRICS,
   excludeRoutes: ['/health', '/healthcheck'],
   defaultLabels: {},
 };
@@ -95,7 +96,15 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   fastify: FastifyInstance,
   options: FastifyPrometheusOptions
 ) => {
-  const config = { ...DEFAULT_OPTIONS, ...options };
+  // httpMetrics is deep-merged and the route defaults are applied field by field, so an
+  // explicit `undefined` from JavaScript callers can't erase a default.
+  const config = {
+    ...DEFAULT_OPTIONS,
+    ...options,
+    httpMetrics: mergeHttpMetrics(DEFAULT_HTTP_METRICS, options.httpMetrics),
+    routeMatch: options.routeMatch ?? 'exact',
+    unmatchedRouteLabel: options.unmatchedRouteLabel ?? DEFAULT_UNMATCHED_ROUTE_LABEL,
+  };
   const metricsRegistry = config.register ?? register;
 
   // Validate exemplar options first so a misconfiguration fails before anything is registered
@@ -135,15 +144,13 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   }
 
   // Initialize HTTP metrics
-  if (config.httpMetrics) {
-    initializeHttpMetrics(
-      config.httpMetrics,
-      metrics,
-      metricsRegistry,
-      config.prefix,
-      exemplarExtractor !== undefined ? exemplarMetrics : undefined
-    );
-  }
+  initializeHttpMetrics(
+    config.httpMetrics,
+    metrics,
+    metricsRegistry,
+    config.prefix,
+    exemplarExtractor !== undefined ? exemplarMetrics : undefined
+  );
 
   // Initialize custom metrics
   if (config.customMetrics && config.customMetrics.length > 0) {
@@ -261,23 +268,21 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
       metricsData.responseSize = responseSize;
     }
 
-    if (config.httpMetrics) {
-      // Prefer the onRequest snapshot: tracing instrumentations may end or detach the span before
-      // onResponse runs. Fall back to extracting now (e.g. labels set by the route handler).
-      const exemplarLabels =
-        requestExemplars.get(request) ??
-        (exemplarExtractor !== undefined
-          ? safeExtractExemplar(exemplarExtractor, request)
-          : undefined);
-      recordHttpMetrics(
-        metricsData,
-        config.httpMetrics,
-        metrics,
-        awsExporter,
-        exemplarMetrics,
-        exemplarLabels
-      );
-    }
+    // Prefer the onRequest snapshot: tracing instrumentations may end or detach the span before
+    // onResponse runs. Fall back to extracting now (e.g. labels set by the route handler).
+    const exemplarLabels =
+      requestExemplars.get(request) ??
+      (exemplarExtractor !== undefined
+        ? safeExtractExemplar(exemplarExtractor, request)
+        : undefined);
+    recordHttpMetrics(
+      metricsData,
+      config.httpMetrics,
+      metrics,
+      awsExporter,
+      exemplarMetrics,
+      exemplarLabels
+    );
   });
 
   // Add plugin context methods
@@ -343,9 +348,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     },
 
     recordHttpRequest(httpMetrics: HttpRequestMetrics): void {
-      if (config.httpMetrics) {
-        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter, exemplarMetrics);
-      }
+      recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter, exemplarMetrics);
     },
   };
 

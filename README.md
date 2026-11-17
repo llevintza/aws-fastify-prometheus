@@ -102,11 +102,11 @@ await fastify.register(fastifyPrometheusPlugin, {
   // Default metrics collection interval (default: 10000ms)
   defaultMetricsInterval: 5000,
 
-  // Exclude routes from metrics collection
+  // Exclude routes from metrics collection (strings match the route exactly)
   excludeRoutes: ['/health', '/metrics'],
 
-  // Only include specific routes (optional). Strings are substrings, not globs:
-  // use '/api' or a RegExp such as /^\/api\//
+  // Only include specific routes (optional). Strings are not globs:
+  // use a RegExp such as /^\/api\// to match a prefix
   includeRoutes: [/^\/api\//],
 
   // Add default labels to all metrics
@@ -115,27 +115,16 @@ await fastify.register(fastifyPrometheusPlugin, {
     version: '1.0.0',
   },
 
-  // Configure HTTP metrics
+  // Configure HTTP metrics. Merged with the defaults: list only what you change
   httpMetrics: {
     requestDuration: {
-      enabled: true,
-      name: 'http_request_duration_ms',
-      help: 'Request duration in milliseconds',
       buckets: [1, 5, 15, 50, 100, 500, 1000, 5000], // Custom buckets
-      labels: ['method', 'route', 'status_code'],
-    },
-    requestCount: {
-      enabled: true,
-      name: 'http_requests_total',
-      help: 'Total HTTP requests',
-      labels: ['method', 'route', 'status_code'],
     },
     responseSize: {
-      enabled: true,
       buckets: [100, 1000, 10000, 100000], // Custom response size buckets
     },
-    errorCount: { enabled: true },
-    successCount: { enabled: true },
+    successCount: { enabled: false }, // Drop a default metric
+    inFlight: { enabled: true }, // Opt in to the in-flight gauge
   },
 
   // Define custom metrics
@@ -308,9 +297,9 @@ per-route `metrics: false` opt-out), and its only label is `method`.
   Fastify version that has `onRequestAbort` for an accurate gauge.
 
 `inFlight` takes `enabled`, plus optional `name` (default
-`http_requests_in_flight`) and `help`. Because a partial `httpMetrics` replaces
-the defaults, see [Configuration Options](#configuration-options) for how to
-enable it and keep the default HTTP metrics.
+`http_requests_in_flight`) and `help`.
+`httpMetrics: { inFlight: { enabled: true } }` enables it and keeps every
+default HTTP metric.
 
 ## AWS CloudWatch Integration
 
@@ -429,13 +418,13 @@ The `/metrics` response's `Content-Type` always comes from the registry
 | `endpoint`               | `string`                       | `'/metrics'`                  | Metrics endpoint path                                                                                        |
 | `enableDefaultMetrics`   | `boolean`                      | `true`                        | Enable Node.js default metrics                                                                               |
 | `defaultMetricsInterval` | `number`                       | `10000`                       | Default metrics collection interval (ms)                                                                     |
-| `httpMetrics`            | `HttpMetricsConfig`            | See defaults                  | HTTP metrics configuration                                                                                   |
+| `httpMetrics`            | `HttpMetricsConfig`            | See defaults                  | HTTP metrics configuration, deep-merged with the defaults (see below)                                        |
 | `customMetrics`          | `CustomMetricDefinition[]`     | `[]`                          | Custom metrics definitions                                                                                   |
 | `awsCloudWatch`          | `AwsExporterConfig`            | `undefined`                   | AWS CloudWatch integration                                                                                   |
 | `excludeRoutes`          | `RouteMatcher[]`               | `['/health', '/healthcheck']` | Routes to exclude (see [Route filtering](#route-filtering))                                                  |
 | `includeRoutes`          | `RouteMatcher[]`               | `undefined`                   | Routes to include (if specified, only these routes are included)                                             |
-| `routeMatch`             | `'substring' \| 'exact'`       | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`                                                   |
-| `unmatchedRouteLabel`    | `string`                       | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset                                                |
+| `routeMatch`             | `'substring' \| 'exact'`       | `'exact'`                     | String matching mode for `excludeRoutes` / `includeRoutes`                                                   |
+| `unmatchedRouteLabel`    | `string \| false`              | `'__unmatched__'`             | `route` label for unmatched requests (404s); `false` uses the raw URL                                        |
 | `defaultLabels`          | `Record<string, string>`       | `{}`                          | Default labels for all metrics                                                                               |
 | `prefix`                 | `string`                       | `undefined`                   | Prefix for HTTP and custom metric names (see below)                                                          |
 | `openMetrics`            | `boolean`                      | `false`                       | Serve `/metrics` in OpenMetrics format (switches the registry's content type)                                |
@@ -450,47 +439,18 @@ default metrics or CloudWatch export names (see #254). Context methods such as
 `errorCount`, `successCount` and `inFlight` (`InFlightConfig`: `enabled`,
 `name`, `help`; off by default).
 
-**A partial `httpMetrics` replaces the defaults.** Options are merged shallowly,
-so passing `httpMetrics` replaces the whole default HTTP metrics config: only
-the metrics you list are registered. To add `inFlight` and keep the default
-metrics, list each default metric next to it:
+**`httpMetrics` is merged with the defaults**, metric by metric and field by
+field. A metric you leave out keeps its default config, and a field you leave
+out of a metric keeps its default value. Arrays such as `buckets` and `labels`
+replace the default array rather than being appended to it. Set `enabled: false`
+to drop a default metric:
 
 ```typescript
 await fastify.register(fastifyPrometheusPlugin, {
   httpMetrics: {
-    requestDuration: {
-      enabled: true,
-      name: 'http_request_duration_ms',
-      help: 'Duration of HTTP requests in milliseconds',
-      buckets: [0.1, 5, 15, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000],
-      labels: ['method', 'route', 'status_code'],
-    },
-    requestCount: {
-      enabled: true,
-      name: 'http_requests_total',
-      help: 'Total number of HTTP requests',
-      labels: ['method', 'route', 'status_code'],
-    },
-    responseSize: {
-      enabled: true,
-      name: 'http_response_size_bytes',
-      help: 'Size of HTTP responses in bytes',
-      buckets: [1, 100, 1000, 10000, 100000, 1000000],
-      labels: ['method', 'route', 'status_code'],
-    },
-    errorCount: {
-      enabled: true,
-      name: 'http_errors_total',
-      help: 'Total number of HTTP errors',
-      labels: ['method', 'route', 'status_code'],
-    },
-    successCount: {
-      enabled: true,
-      name: 'http_success_total',
-      help: 'Total number of successful HTTP requests',
-      labels: ['method', 'route', 'status_code'],
-    },
-    inFlight: { enabled: true },
+    inFlight: { enabled: true }, // add the in-flight gauge
+    requestDuration: { buckets: [5, 50, 500, 5000] }, // keeps name, help, labels
+    responseSize: { enabled: false }, // drop a default metric
   },
 });
 ```
@@ -501,13 +461,15 @@ Filters are applied to the registered route pattern (for example `/users/:id`),
 or, for requests that match no route, to the raw request URL.
 `unmatchedRouteLabel` only changes the emitted `route` label afterwards, so
 `includeRoutes: [/^\/api\//]` still records a 404 on `/api/missing` (labelled
-`__unmatched__` if set). Each entry in `excludeRoutes` / `includeRoutes` is a
-`RouteMatcher`:
+`__unmatched__` by default). Each entry in `excludeRoutes` / `includeRoutes` is
+a `RouteMatcher`:
 
-- a `string`, matched with `String.includes()` by default, or by equality with
-  `routeMatch: 'exact'`. Strings are not globs (`'/api/*'` matches nothing). In
-  exact mode an unmatched request's query string and fragment are ignored, so
-  `'/x'` matches `/x?y=1`; substring mode sees the raw URL, as before
+- a `string`, matched by equality by default (`routeMatch: 'exact'`), or with
+  `String.includes()` with `routeMatch: 'substring'`. Strings are not globs
+  (`'/api/*'` matches nothing). In exact mode an unmatched request's query
+  string and fragment are ignored, so `'/x'` matches `/x?y=1`; substring mode
+  sees the raw URL. The default `excludeRoutes` (`'/health'`, `'/healthcheck'`)
+  therefore drop exactly those routes and keep `/healthcare`
 - a `RegExp`, tested against the route (`routeMatch` does not apply)
 - a function `(route: string) => boolean`. It runs on every response, so it
   should be cheap and must not throw (an error raised in it surfaces from the
@@ -518,13 +480,12 @@ A route is skipped if it matches any `excludeRoutes` entry, or if
 
 ```typescript
 await fastify.register(fastifyPrometheusPlugin, {
-  routeMatch: 'exact', // '/health' no longer drops '/healthcare'
   excludeRoutes: [
-    '/health',
+    '/health', // exact by default: '/healthcare' is still recorded
     /^\/internal\//,
     route => route.endsWith('/debug'),
   ],
-  unmatchedRouteLabel: '__unmatched__', // all 404s share one label value
+  unmatchedRouteLabel: '__not_found__', // all 404s share one label value
 });
 
 // Per-route opt-out
@@ -533,6 +494,29 @@ fastify.get('/ping', { config: { metrics: false } }, async () => 'pong');
 
 The filter logic is exported as a pure helper, `shouldRecord(route, config)`, if
 you need the same decision elsewhere.
+
+## Migrating from 2.x to 3.0
+
+3.0 changes three defaults. Each can be restored with one option.
+
+| Change                                                                                                                                                                                              | How to restore the 2.x behaviour                                                                                                                                                                                          |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `httpMetrics` is deep-merged with the defaults. A partial `httpMetrics` (for example `{ inFlight: { enabled: true } }`) used to replace every default metric; now the default metrics stay enabled. | Set `enabled: false` on each default metric you don't want. `httpMetrics: {}` no longer disables the HTTP metrics: disable `requestDuration`, `requestCount`, `responseSize`, `errorCount` and `successCount` explicitly. |
+| `routeMatch` defaults to `'exact'` instead of `'substring'`. String `excludeRoutes` / `includeRoutes` entries must equal the route, so `'/health'` no longer drops `/healthcare` or `/api/health`.  | `routeMatch: 'substring'`, or use a `RegExp` / function matcher for prefix matches (for example `/^\/api\//`).                                                                                                            |
+| `unmatchedRouteLabel` defaults to `'__unmatched__'`. Requests that match no route (404s) are labelled `route="__unmatched__"` instead of the raw URL.                                               | `unmatchedRouteLabel: false`                                                                                                                                                                                              |
+
+What to check when you upgrade:
+
+- **New series.** If you passed a partial `httpMetrics`, the default metrics you
+  left out now appear on `/metrics`.
+- **Route filters.** Under exact matching a string entry must be the full route
+  pattern as registered (`/users/:id`, including any plugin prefix such as
+  `/api/health`). Entries that relied on substring matching, such as `'/api'` to
+  include everything under `/api`, need a `RegExp` or `routeMatch: 'substring'`.
+  The default `excludeRoutes` now only drop `/health` and `/healthcheck`, so
+  routes like `/healthz` or `/api/health` are recorded.
+- **Dashboards and alerts** that select 404s by their raw URL in the `route`
+  label need `route="__unmatched__"` instead (or `unmatchedRouteLabel: false`).
 
 ## TypeScript Support
 
@@ -576,11 +560,10 @@ fastify.prometheus.incrementCounter('my_counter', { label: 'value' });
    descriptive names)
 2. **Label Cardinality**: Keep the number of unique label combinations
    reasonable to avoid high cardinality. By default, requests that match no
-   route (404 scanners, typos, URLs with IDs or query strings) use the raw URL
-   as the `route` label, so every distinct URL creates new time series. Set
-   `unmatchedRouteLabel: '__unmatched__'` to collapse them into one series, and
-   prefer `routeMatch: 'exact'` so `excludeRoutes` entries don't accidentally
-   drop similarly named routes
+   route (404 scanners, typos, URLs with IDs or query strings) share the
+   `route="__unmatched__"` label value. `unmatchedRouteLabel: false` puts the
+   raw URL in the label instead, so every distinct URL creates new time series;
+   avoid it on internet-facing services
 3. **Histogram Buckets**: Choose buckets that make sense for your use case
 4. **Route Filtering**: Exclude health check and internal routes from metrics
 5. **Custom Metrics**: Define custom metrics that provide business value

@@ -74,7 +74,10 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
   /** Default metrics collection interval in milliseconds */
   defaultMetricsInterval?: number;
 
-  /** Predefined HTTP metrics configuration */
+  /**
+   * Predefined HTTP metrics configuration. Deep-merged with the defaults: a metric or field
+   * left out keeps its default, and `enabled: false` turns a default metric off.
+   */
   httpMetrics?: HttpMetricsConfig;
 
   /** Custom metrics definitions */
@@ -91,15 +94,16 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
 
   /**
    * How string entries in `excludeRoutes` / `includeRoutes` are matched.
-   * Defaults to `'substring'`.
+   * Defaults to `'exact'` (since 3.0; set `'substring'` for the 2.x behaviour).
    */
   routeMatch?: RouteMatchMode;
 
   /**
    * Label used for the `route` label when a request matched no registered route
-   * (for example a 404). When unset, the raw request URL is used.
+   * (for example a 404). Defaults to `'__unmatched__'` (since 3.0). Set `false` to use the
+   * raw request URL instead (the 2.x behaviour, which can explode label cardinality).
    */
-  unmatchedRouteLabel?: string;
+  unmatchedRouteLabel?: string | false;
 
   /** Custom labels to add to all metrics */
   defaultLabels?: Record<string, string>;
@@ -146,7 +150,7 @@ export interface RouteFilterConfig {
   /** When non-empty, only matching routes are recorded */
   includeRoutes?: RouteMatcher[];
 
-  /** String matching mode (default `'substring'`) */
+  /** String matching mode (default `'exact'`) */
   routeMatch?: RouteMatchMode;
 }
 

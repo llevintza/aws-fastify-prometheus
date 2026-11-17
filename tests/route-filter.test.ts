@@ -7,9 +7,15 @@ import { describe, test, expect } from '@jest/globals';
 import { matchesRoute, shouldRecord } from '../src/index';
 
 describe('matchesRoute', () => {
-  test('string matcher uses substring matching by default', () => {
-    expect(matchesRoute('/healthcare', '/health')).toBe(true);
-    expect(matchesRoute('/users', '/health')).toBe(false);
+  test('string matcher uses exact matching by default (3.0)', () => {
+    expect(matchesRoute('/health', '/health')).toBe(true);
+    expect(matchesRoute('/health?probe=1', '/health')).toBe(true);
+    expect(matchesRoute('/healthcare', '/health')).toBe(false);
+  });
+
+  test("string matcher uses String.includes in 'substring' mode", () => {
+    expect(matchesRoute('/healthcare', '/health', 'substring')).toBe(true);
+    expect(matchesRoute('/users', '/health', 'substring')).toBe(false);
   });
 
   test('string matcher uses equality in exact mode', () => {
@@ -30,7 +36,7 @@ describe('matchesRoute', () => {
   });
 
   test('substring mode and RegExp/function matchers see the raw URL', () => {
-    expect(matchesRoute('/x?debug=1', 'debug')).toBe(true);
+    expect(matchesRoute('/x?debug=1', 'debug', 'substring')).toBe(true);
     expect(matchesRoute('/x?y=1', /\?y=1$/, 'exact')).toBe(true);
     expect(matchesRoute('/x?y=1', (r: string) => r === '/x?y=1', 'exact')).toBe(true);
   });
@@ -59,21 +65,28 @@ describe('shouldRecord', () => {
     expect(shouldRecord('/anything', { excludeRoutes: [], includeRoutes: [] })).toBe(true);
   });
 
-  test('substring exclusion drops similar routes (legacy default)', () => {
-    const config = { excludeRoutes: ['/health'] };
+  test("'substring' exclusion drops similar routes (2.x default)", () => {
+    const config = { excludeRoutes: ['/health'], routeMatch: 'substring' as const };
     expect(shouldRecord('/health', config)).toBe(false);
     expect(shouldRecord('/healthcare', config)).toBe(false);
     expect(shouldRecord('/users', config)).toBe(true);
   });
 
-  test('exact exclusion keeps similar routes', () => {
+  test('exact exclusion keeps similar routes by default (3.0)', () => {
+    const config = { excludeRoutes: ['/health'] };
+    expect(shouldRecord('/health', config)).toBe(false);
+    expect(shouldRecord('/health?probe=1', config)).toBe(false);
+    expect(shouldRecord('/healthcare', config)).toBe(true);
+  });
+
+  test('explicit exact exclusion keeps similar routes', () => {
     const config = { excludeRoutes: ['/health'], routeMatch: 'exact' as const };
     expect(shouldRecord('/health', config)).toBe(false);
     expect(shouldRecord('/healthcare', config)).toBe(true);
   });
 
-  test('include list restricts recording to matching routes', () => {
-    const config = { includeRoutes: ['/api'] };
+  test("'substring' include list restricts recording to matching routes", () => {
+    const config = { includeRoutes: ['/api'], routeMatch: 'substring' as const };
     expect(shouldRecord('/api/users', config)).toBe(true);
     expect(shouldRecord('/web', config)).toBe(false);
   });
@@ -106,7 +119,17 @@ describe('shouldRecord', () => {
 
   test('exclusion wins over inclusion', () => {
     expect(
-      shouldRecord('/api/health', { includeRoutes: ['/api'], excludeRoutes: ['health'] })
+      shouldRecord('/api/health', {
+        includeRoutes: ['/api'],
+        excludeRoutes: ['health'],
+        routeMatch: 'substring',
+      })
+    ).toBe(false);
+    expect(
+      shouldRecord('/api/health', {
+        includeRoutes: ['/api/health'],
+        excludeRoutes: ['/api/health'],
+      })
     ).toBe(false);
   });
 });
