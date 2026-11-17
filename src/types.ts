@@ -103,6 +103,13 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
 
   /** Custom labels to add to all metrics */
   defaultLabels?: Record<string, string>;
+
+  /**
+   * Prefix prepended verbatim to the HTTP and custom metric names registered by the plugin
+   * (for example `'myapp_'`). Context methods such as `incrementCounter` still take the
+   * unprefixed name. Default: no prefix.
+   */
+  prefix?: string;
 }
 
 /**
@@ -147,6 +154,23 @@ export interface HttpMetricsConfig {
 
   /** Enable success count counter */
   successCount?: SuccessCountConfig;
+
+  /** Enable the in-flight requests gauge (off by default) */
+  inFlight?: InFlightConfig;
+}
+
+/**
+ * In-flight requests gauge configuration. The gauge has a single `method` label.
+ */
+export interface InFlightConfig {
+  /** Enable this metric (default: false) */
+  enabled?: boolean;
+
+  /** Metric name (default: `http_requests_in_flight`) */
+  name?: string;
+
+  /** Metric help text */
+  help?: string;
 }
 
 /**

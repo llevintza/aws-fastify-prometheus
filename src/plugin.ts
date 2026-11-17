@@ -7,6 +7,7 @@ import fp from 'fastify-plugin';
 import { register, collectDefaultMetrics, Counter, Gauge, Histogram, Summary } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
+import { elapsedMs, prefixMetricName } from './metric-utils';
 import { shouldRecord } from './route-filter';
 import type {
   FastifyPrometheusOptions,
@@ -15,7 +16,11 @@ import type {
   CustomMetricDefinition,
   HttpMetricsConfig,
   FastifyPrometheusContext,
+  InFlightConfig,
 } from './types';
+
+const DEFAULT_IN_FLIGHT_NAME = 'http_requests_in_flight';
+const DEFAULT_IN_FLIGHT_HELP = 'Number of HTTP requests currently being processed';
 
 /**
  * Default configuration for HTTP metrics
@@ -52,6 +57,11 @@ const DEFAULT_HTTP_METRICS: Required<HttpMetricsConfig> = {
     name: 'http_success_total',
     help: 'Total number of successful HTTP requests',
     labels: ['method', 'route', 'status_code'],
+  },
+  inFlight: {
+    enabled: false,
+    name: DEFAULT_IN_FLIGHT_NAME,
+    help: DEFAULT_IN_FLIGHT_HELP,
   },
 };
 
@@ -100,13 +110,33 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
   // Initialize HTTP metrics
   if (config.httpMetrics) {
-    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry);
+    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry, config.prefix);
   }
 
   // Initialize custom metrics
   if (config.customMetrics && config.customMetrics.length > 0) {
-    initializeCustomMetrics(config.customMetrics, metrics, metricsRegistry);
+    initializeCustomMetrics(config.customMetrics, metrics, metricsRegistry, config.prefix);
   }
+
+  // Initialize the opt-in in-flight requests gauge
+  const inFlightGauge = createInFlightGauge(
+    config.httpMetrics?.inFlight,
+    metricsRegistry,
+    config.prefix
+  );
+  // Requests that incremented the gauge; deleting on decrement prevents double-decrements
+  const inFlightRequests = new WeakSet<FastifyRequest>();
+
+  // Same filter as the HTTP metrics in onResponse: per-route opt-out, then include/exclude.
+  const isRouteRecorded = (request: FastifyRequest): boolean =>
+    request.routeOptions.config?.metrics !== false &&
+    shouldRecord(request.routeOptions.url ?? request.url, config);
+
+  const decrementInFlight = (request: FastifyRequest): void => {
+    if (inFlightGauge !== undefined && inFlightRequests.delete(request)) {
+      inFlightGauge.dec({ method: request.method });
+    }
+  };
 
   // Add metrics endpoint
   if (typeof config.endpoint === 'string' && config.endpoint.length > 0) {
@@ -122,29 +152,47 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
   // Add request tracking hooks
   void fastify.addHook('onRequest', async (request: FastifyRequest) => {
-    request.startTime = Date.now();
+    request.startTime = process.hrtime.bigint();
+
+    if (inFlightGauge !== undefined && isRouteRecorded(request)) {
+      inFlightGauge.inc({ method: request.method });
+      inFlightRequests.add(request);
+    }
 
     return Promise.resolve();
   });
 
+  if (inFlightGauge !== undefined) {
+    // Aborted requests may never reach onResponse; decrement here so the gauge can't leak.
+    // Older Fastify 4.x minors don't know this hook and throw from addHook; there the gauge
+    // is decremented in onResponse only.
+    try {
+      void fastify.addHook('onRequestAbort', async (request: FastifyRequest) => {
+        decrementInFlight(request);
+        return Promise.resolve();
+      });
+    } catch (error) {
+      fastify.log.warn(
+        { err: error },
+        'onRequestAbort hook unsupported by this Fastify version; in-flight gauge relies on onResponse'
+      );
+    }
+  }
+
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Per-route opt-out: fastify.get('/x', { config: { metrics: false } }, handler)
-    // `config` is typed as always set; the optional chain guards unusual not-found paths anyway.
-    if (request.routeOptions.config?.metrics === false) {
+    decrementInFlight(request);
+
+    if (!isRouteRecorded(request)) {
       return;
     }
 
     // Decide record/skip on the matched pattern or the raw URL, then pick the emitted label.
     const matchedRoute = request.routeOptions.url;
-    if (!shouldRecord(matchedRoute ?? request.url, config)) {
-      return;
-    }
-
     const route =
       matchedRoute ??
       (typeof config.unmatchedRouteLabel === 'string' ? config.unmatchedRouteLabel : request.url);
 
-    const duration = typeof request.startTime === 'number' ? Date.now() - request.startTime : 0;
+    const duration = typeof request.startTime === 'bigint' ? elapsedMs(request.startTime) : 0;
     const labels = {
       method: request.method,
       route,
@@ -275,7 +323,8 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 function initializeHttpMetrics(
   config: HttpMetricsConfig,
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
-  registry: typeof register
+  registry: typeof register,
+  prefix?: string
 ): void {
   if (
     config.requestDuration?.enabled === true &&
@@ -285,7 +334,7 @@ function initializeHttpMetrics(
     config.requestDuration.help.length > 0
   ) {
     const metric = new Histogram({
-      name: config.requestDuration.name,
+      name: prefixMetricName(config.requestDuration.name, prefix),
       help: config.requestDuration.help,
       labelNames: config.requestDuration.labels ?? [],
       buckets: config.requestDuration.buckets ?? [0.1, 0.5, 1, 2, 5, 10],
@@ -302,7 +351,7 @@ function initializeHttpMetrics(
     config.requestCount.help.length > 0
   ) {
     const metric = new Counter({
-      name: config.requestCount.name,
+      name: prefixMetricName(config.requestCount.name, prefix),
       help: config.requestCount.help,
       labelNames: config.requestCount.labels ?? [],
       registers: [registry],
@@ -318,7 +367,7 @@ function initializeHttpMetrics(
     config.responseSize.help.length > 0
   ) {
     const metric = new Histogram({
-      name: config.responseSize.name,
+      name: prefixMetricName(config.responseSize.name, prefix),
       help: config.responseSize.help,
       labelNames: config.responseSize.labels ?? [],
       buckets: config.responseSize.buckets ?? [10, 100, 1000, 10000, 100000],
@@ -335,7 +384,7 @@ function initializeHttpMetrics(
     config.errorCount.help.length > 0
   ) {
     const metric = new Counter({
-      name: config.errorCount.name,
+      name: prefixMetricName(config.errorCount.name, prefix),
       help: config.errorCount.help,
       labelNames: config.errorCount.labels ?? [],
       registers: [registry],
@@ -351,7 +400,7 @@ function initializeHttpMetrics(
     config.successCount.help.length > 0
   ) {
     const metric = new Counter({
-      name: config.successCount.name,
+      name: prefixMetricName(config.successCount.name, prefix),
       help: config.successCount.help,
       labelNames: config.successCount.labels ?? [],
       registers: [registry],
@@ -366,9 +415,11 @@ function initializeHttpMetrics(
 function initializeCustomMetrics(
   customMetrics: CustomMetricDefinition[],
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
-  registry: typeof register
+  registry: typeof register,
+  prefix?: string
 ): void {
   for (const metricDef of customMetrics) {
+    const name = prefixMetricName(metricDef.name, prefix);
     let metric: Counter | Gauge | Histogram | Summary;
 
     switch (metricDef.type) {
@@ -381,7 +432,7 @@ function initializeCustomMetrics(
             labelNames?: string[];
           }
           const config: CounterConfig = {
-            name: metricDef.name,
+            name,
             help: metricDef.help,
             registers: [registry],
           };
@@ -401,7 +452,7 @@ function initializeCustomMetrics(
             labelNames?: string[];
           }
           const config: GaugeConfig = {
-            name: metricDef.name,
+            name,
             help: metricDef.help,
             registers: [registry],
           };
@@ -422,7 +473,7 @@ function initializeCustomMetrics(
             buckets?: number[];
           }
           const config: HistogramConfig = {
-            name: metricDef.name,
+            name,
             help: metricDef.help,
             registers: [registry],
           };
@@ -448,7 +499,7 @@ function initializeCustomMetrics(
             ageBuckets?: number;
           }
           const config: SummaryConfig = {
-            name: metricDef.name,
+            name,
             help: metricDef.help,
             registers: [registry],
           };
@@ -477,6 +528,35 @@ function initializeCustomMetrics(
 
     metrics.set(metricDef.name, metric);
   }
+}
+
+/**
+ * Create the in-flight requests gauge when enabled. Unset name/help fall back to defaults.
+ */
+function createInFlightGauge(
+  config: InFlightConfig | undefined,
+  registry: typeof register,
+  prefix?: string
+): Gauge<'method'> | undefined {
+  if (config?.enabled !== true) {
+    return undefined;
+  }
+
+  const name =
+    typeof config.name === 'string' && config.name.length > 0
+      ? config.name
+      : DEFAULT_IN_FLIGHT_NAME;
+  const help =
+    typeof config.help === 'string' && config.help.length > 0
+      ? config.help
+      : DEFAULT_IN_FLIGHT_HELP;
+
+  return new Gauge({
+    name: prefixMetricName(name, prefix),
+    help,
+    labelNames: ['method'],
+    registers: [registry],
+  });
 }
 
 /**
@@ -634,7 +714,7 @@ function recordHttpMetrics(
 // Extend FastifyRequest interface to include startTime
 declare module 'fastify' {
   interface FastifyRequest {
-    startTime?: number;
+    startTime?: bigint;
   }
 
   interface FastifyInstance {

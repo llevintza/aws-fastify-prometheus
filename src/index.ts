@@ -20,6 +20,7 @@ export type {
   ResponseSizeConfig,
   ErrorCountConfig,
   SuccessCountConfig,
+  InFlightConfig,
   CustomMetricDefinition,
   CustomMetricConfig,
   AwsExporterConfig,

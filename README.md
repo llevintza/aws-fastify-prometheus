@@ -278,13 +278,38 @@ fastify.prometheus.observeSummary('processing_time', 150.5, { type: 'batch' });
 
 The plugin automatically collects the following HTTP metrics:
 
-| Metric Name                | Type      | Description                                    | Labels                           |
-| -------------------------- | --------- | ---------------------------------------------- | -------------------------------- |
-| `http_request_duration_ms` | Histogram | Request duration in milliseconds               | `method`, `route`, `status_code` |
-| `http_requests_total`      | Counter   | Total number of HTTP requests                  | `method`, `route`, `status_code` |
-| `http_response_size_bytes` | Histogram | Response size in bytes                         | `method`, `route`, `status_code` |
-| `http_errors_total`        | Counter   | Total number of HTTP errors (4xx, 5xx)         | `method`, `route`, `status_code` |
-| `http_success_total`       | Counter   | Total number of successful requests (2xx, 3xx) | `method`, `route`, `status_code` |
+| Metric Name                | Type      | Description                                                | Labels                           |
+| -------------------------- | --------- | ---------------------------------------------------------- | -------------------------------- |
+| `http_request_duration_ms` | Histogram | Request duration in milliseconds                           | `method`, `route`, `status_code` |
+| `http_requests_total`      | Counter   | Total number of HTTP requests                              | `method`, `route`, `status_code` |
+| `http_response_size_bytes` | Histogram | Response size in bytes                                     | `method`, `route`, `status_code` |
+| `http_errors_total`        | Counter   | Total number of HTTP errors (4xx, 5xx)                     | `method`, `route`, `status_code` |
+| `http_success_total`       | Counter   | Total number of successful requests (2xx, 3xx)             | `method`, `route`, `status_code` |
+| `http_requests_in_flight`  | Gauge     | Requests currently being processed (**opt-in**, see below) | `method`                         |
+
+Request durations are measured with `process.hrtime.bigint()` and recorded as
+fractional milliseconds, so sub-millisecond buckets such as `0.1` are
+meaningful.
+
+The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`. It
+goes up in `onRequest` and down exactly once, in `onResponse` or in
+`onRequestAbort` when the client disconnects. It uses the same filtering as the
+other HTTP metrics (`excludeRoutes` / `includeRoutes`, `routeMatch` and the
+per-route `metrics: false` opt-out), and its only label is `method`.
+
+- **Scrapes count themselves.** `/metrics` isn't in the default `excludeRoutes`,
+  so each scrape sees at least 1 for `GET`. Add your metrics endpoint to
+  `excludeRoutes` to leave it out.
+- **Older Fastify 4.x.** Fastify versions without the `onRequestAbort` hook
+  (older 4.x minors) log a warning at startup and decrement in `onResponse`
+  only. There, a client abort that never reaches `onResponse` leaves the gauge
+  incremented, so it can drift upward over the life of the process. Use a
+  Fastify version that has `onRequestAbort` for an accurate gauge.
+
+`inFlight` takes `enabled`, plus optional `name` (default
+`http_requests_in_flight`) and `help`. Because a partial `httpMetrics` replaces
+the defaults, see [Configuration Options](#configuration-options) for how to
+enable it and keep the default HTTP metrics.
 
 ## AWS CloudWatch Integration
 
@@ -324,6 +349,61 @@ await fastify.register(fastifyPrometheusPlugin, {
 | `routeMatch`             | `'substring' \| 'exact'`   | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`       |
 | `unmatchedRouteLabel`    | `string`                   | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset    |
 | `defaultLabels`          | `Record<string, string>`   | `{}`                          | Default labels for all metrics                                   |
+| `prefix`                 | `string`                   | `undefined`                   | Prefix for HTTP and custom metric names (see below)              |
+
+`prefix` is prepended verbatim to the HTTP, in-flight and custom metric names
+(`'myapp_'` gives `myapp_http_requests_total`). It is not applied to Node.js
+default metrics or CloudWatch export names (see #254). Context methods such as
+`incrementCounter` still take the unprefixed name.
+
+`HttpMetricsConfig` accepts `requestDuration`, `requestCount`, `responseSize`,
+`errorCount`, `successCount` and `inFlight` (`InFlightConfig`: `enabled`,
+`name`, `help`; off by default).
+
+**A partial `httpMetrics` replaces the defaults.** Options are merged shallowly,
+so passing `httpMetrics` replaces the whole default HTTP metrics config: only
+the metrics you list are registered. To add `inFlight` and keep the default
+metrics, list each default metric next to it:
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  httpMetrics: {
+    requestDuration: {
+      enabled: true,
+      name: 'http_request_duration_ms',
+      help: 'Duration of HTTP requests in milliseconds',
+      buckets: [0.1, 5, 15, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    requestCount: {
+      enabled: true,
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    responseSize: {
+      enabled: true,
+      name: 'http_response_size_bytes',
+      help: 'Size of HTTP responses in bytes',
+      buckets: [1, 100, 1000, 10000, 100000, 1000000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    errorCount: {
+      enabled: true,
+      name: 'http_errors_total',
+      help: 'Total number of HTTP errors',
+      labels: ['method', 'route', 'status_code'],
+    },
+    successCount: {
+      enabled: true,
+      name: 'http_success_total',
+      help: 'Total number of successful HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    inFlight: { enabled: true },
+  },
+});
+```
 
 ### Route filtering
 
