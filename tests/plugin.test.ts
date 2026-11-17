@@ -938,8 +938,9 @@ describe('Route matching and cardinality guard', () => {
       excludeRoutes: ['/wp-login.php'],
     });
 
+    // No '#fragment' case here: light-my-request drops fragments before the plugin sees the URL.
+    // Fragment stripping is covered by the matchesRoute unit tests in route-filter.test.ts.
     await fastify.inject({ method: 'GET', url: '/wp-login.php?redirect=1' });
-    await fastify.inject({ method: 'GET', url: '/wp-login.php#top' });
     await fastify.inject({ method: 'GET', url: '/wp-login.phpx?redirect=1' });
 
     expect(routeLabels(await fastify.prometheus.getMetrics())).toEqual([
