@@ -270,9 +270,16 @@ The plugin automatically collects the following HTTP metrics:
 Request durations are measured with `process.hrtime.bigint()` and recorded as fractional
 milliseconds, so sub-millisecond buckets such as `0.1` are meaningful.
 
-The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`; it goes up in
-`onRequest` and down in `onResponse`, or in `onRequestAbort` when the client disconnects, so it
-can't leak. It honours `excludeRoutes` / `includeRoutes`.
+The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`. It goes up in
+`onRequest` and down exactly once, in `onResponse` or in `onRequestAbort` when the client
+disconnects. It honours `excludeRoutes` / `includeRoutes`, and its only label is `method`.
+
+- **Scrapes count themselves.** `/metrics` isn't in the default `excludeRoutes`, so each scrape
+  sees at least 1 for `GET`. Add your metrics endpoint to `excludeRoutes` to leave it out.
+- **Older Fastify 4.x.** Fastify versions without the `onRequestAbort` hook (older 4.x minors) log a
+  warning at startup and decrement in `onResponse` only. There, a client abort that never
+  reaches `onResponse` leaves the gauge incremented, so it can drift upward over the life of the
+  process. Use a Fastify version that has `onRequestAbort` for an accurate gauge.
 
 `inFlight` takes `enabled`, plus optional `name` (default `http_requests_in_flight`) and `help`.
 Because a partial `httpMetrics` replaces the defaults, see
