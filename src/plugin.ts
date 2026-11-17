@@ -179,11 +179,20 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   });
 
   if (inFlightGauge !== undefined) {
-    // Aborted requests may never reach onResponse; decrement here so the gauge can't leak
-    void fastify.addHook('onRequestAbort', async (request: FastifyRequest) => {
-      decrementInFlight(request);
-      return Promise.resolve();
-    });
+    // Aborted requests may never reach onResponse; decrement here so the gauge can't leak.
+    // Older Fastify 4.x minors don't know this hook and throw from addHook; there the gauge
+    // is decremented in onResponse only.
+    try {
+      void fastify.addHook('onRequestAbort', async (request: FastifyRequest) => {
+        decrementInFlight(request);
+        return Promise.resolve();
+      });
+    } catch (error) {
+      fastify.log.warn(
+        { err: error },
+        'onRequestAbort hook unsupported by this Fastify version; in-flight gauge relies on onResponse'
+      );
+    }
   }
 
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {

@@ -386,6 +386,32 @@ describe('Fastify Prometheus Plugin', () => {
     });
   });
 
+  test('in-flight gauge still works when onRequestAbort is unsupported', async () => {
+    const fastify = Fastify();
+    const originalAddHook = fastify.addHook.bind(fastify);
+    // Simulate an older Fastify 4.x that rejects the onRequestAbort hook name
+    jest.spyOn(fastify, 'addHook').mockImplementation(((name: string, ...rest: unknown[]) => {
+      if (name === 'onRequestAbort') {
+        throw new Error('onRequestAbort hook not supported!');
+      }
+      return (originalAddHook as (...args: unknown[]) => unknown)(name, ...rest);
+    }) as typeof fastify.addHook);
+
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      enableDefaultMetrics: false,
+      httpMetrics: { inFlight: { enabled: true } },
+    });
+    fastify.get('/test', () => ({ ok: true }));
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    const data = await registry.getSingleMetric('http_requests_in_flight')?.get();
+    expect(data?.values.find(v => v.labels['method'] === 'GET')?.value).toBe(0);
+
+    jest.restoreAllMocks();
+    await fastify.close();
+  });
+
   describe('metric prefix', () => {
     test('prefixes HTTP and custom metric names', async () => {
       const fastify = Fastify();
