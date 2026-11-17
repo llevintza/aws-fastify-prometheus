@@ -4,8 +4,10 @@ Thanks for contributing to `@llevintza/fastify-prometheus-metrics`.
 
 ## Quick links
 
-- [Branching and Release Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based flow; CI publishes only from `main`
-- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire, Dependabot contract
+- [Branching and Release Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based
+  flow; CI publishes only from `main`
+- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire,
+  Dependabot contract
 - [Development Guide](./docs/DEVELOPMENT.md) — local setup and yarn commands
 - [AGENTS.md](./AGENTS.md) — agent/contributor rules (SSOT for tooling)
 - [Report a bug](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=bug_report.yml)
@@ -13,8 +15,8 @@ Thanks for contributing to `@llevintza/fastify-prometheus-metrics`.
 
 ## How to contribute
 
-1. Fork (or clone) and branch from `main` using a Conventional Commits-style name
-   (for example `feat/your-feature` or `fix/your-bug`). See
+1. Fork (or clone) and branch from `main` using a Conventional Commits-style
+   name (for example `feat/your-feature` or `fix/your-bug`). See
    [Branching Strategy](./docs/BRANCHING_STRATEGY.md).
 2. Follow setup in [Development Guide](./docs/DEVELOPMENT.md).
 3. Use [Conventional Commits](https://www.conventionalcommits.org/) on every
@@ -22,7 +24,8 @@ Thanks for contributing to `@llevintza/fastify-prometheus-metrics`.
    [Branching Strategy → Conventional commits](./docs/BRANCHING_STRATEGY.md#conventional-commits--version).
 4. Open a PR into `main`. CI must be green. Do not expect alpha/beta publishes
    from feature branches — those channels are **not** wired; only `main`
-   publishes (see [outdated channels](./docs/BRANCHING_STRATEGY.md#outdated--unused-channel-claims)).
+   publishes (see
+   [outdated channels](./docs/BRANCHING_STRATEGY.md#outdated--unused-channel-claims)).
 5. After review and merge to `main`, semantic-release may publish a stable
    version. Details: [Release Guide](./docs/RELEASE_GUIDE.md).
 

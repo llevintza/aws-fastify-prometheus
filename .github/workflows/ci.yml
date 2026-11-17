@@ -19,14 +19,13 @@ permissions:
   statuses: write
 
 jobs:
-  # Keep job name "Setup" for branch-protection required checks. Uses the local
-  # composite action; other jobs do not needs: this, so the graph stays parallel.
+  # Job name "Setup" is required by the main-branch-protection ruleset.
+  # Real Node/Yarn install lives in ./.github/actions/setup-node-yarn per job.
   setup:
     name: Setup
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
-      - uses: ./.github/actions/setup-node-yarn
+      - run: echo "Setup check retained for ruleset; install is per-job via composite action."
 
   type-check:
     name: TypeScript Type Check
@@ -59,6 +58,8 @@ jobs:
       - uses: ./.github/actions/setup-node-yarn
       - name: Run yarn audit
         id: audit
+        env:
+          YARN_ENABLE_COLORS: '0'
         run: |
           set +e
           yarn npm audit -A -R > audit-report.txt 2>&1
@@ -213,8 +214,16 @@ jobs:
   pr-checks:
     name: PR Checks
     runs-on: ubuntu-latest
-    if: always() && github.event_name == 'pull_request'
-    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+    needs:
+      [
+        type-check,
+        lint-and-format,
+        security-audit,
+        build,
+        test,
+        package-validation,
+      ]
     steps:
       - name: Download coverage summary
         continue-on-error: true
@@ -231,8 +240,9 @@ jobs:
           BUILD: ${{ needs.build.result }}
           TEST: ${{ needs.test.result }}
           PACKAGE: ${{ needs.package-validation.result }}
+          REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
         with:
-          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || github.token }}
           script: |
             const fs = require('fs');
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
@@ -268,7 +278,7 @@ jobs:
             ].join('\n');
             await core.summary.addRaw(summary, true).write();
 
-            if (!process.env.GITHUB_TOKEN) {
+            if (!process.env.REPORT_TOKEN) {
               core.warning('CODE_QUALITY_REPORT_TOKEN unavailable; skipping PR comment upsert');
               return;
             }
@@ -282,13 +292,13 @@ jobs:
               `- Details: [workflow run](${runUrl}) (Summary + Artifacts)`,
             ].join('\n');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               per_page: 100,
             });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            const existing = comments.find((c) => c.body && c.body.startsWith(marker));
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
@@ -318,7 +328,8 @@ jobs:
           set -euo pipefail
           BASE="${{ github.event.pull_request.base.sha }}"
           HEAD="${{ github.sha }}"
-          mapfile -t changed < <(git diff --name-only "$BASE...$HEAD")
+          out=$(git diff --no-renames --name-only "$BASE...$HEAD")
+          mapfile -t changed <<< "$out"
 
           automation=(
             .github/dependabot.yml
@@ -385,7 +396,15 @@ jobs:
   release:
     name: Release
     runs-on: ubuntu-latest
-    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    needs:
+      [
+        type-check,
+        lint-and-format,
+        security-audit,
+        build,
+        test,
+        package-validation,
+      ]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v7

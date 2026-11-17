@@ -22,14 +22,14 @@ yarn install
 
 ## Commands
 
-| Command | Description |
-| --- | --- |
-| `yarn build` | Compile TypeScript → `dist/` |
-| `yarn type-check` | `tsc --noEmit` |
-| `yarn lint` / `yarn lint:fix` | ESLint |
-| `yarn format` / `yarn format:check` | Prettier |
-| `yarn test` / `yarn test:watch` / `yarn test:coverage` | Jest |
-| `yarn madge --circular --extensions ts src/` | Circular import check (CI) |
+| Command                                                | Description                  |
+| ------------------------------------------------------ | ---------------------------- |
+| `yarn build`                                           | Compile TypeScript → `dist/` |
+| `yarn type-check`                                      | `tsc --noEmit`               |
+| `yarn lint` / `yarn lint:fix`                          | ESLint                       |
+| `yarn format` / `yarn format:check`                    | Prettier                     |
+| `yarn test` / `yarn test:watch` / `yarn test:coverage` | Jest                         |
+| `yarn madge --circular --extensions ts src/`           | Circular import check (CI)   |
 
 Single test / by name:
 
@@ -46,18 +46,17 @@ and `yarn test:coverage` must pass.
 
 ## Install the published package (consumers)
 
-Published to GitHub Packages. Configure the `@llevintza` scope, then:
-
-```bash
-npm install @llevintza/fastify-prometheus-metrics
-# or: yarn add / pnpm add
-```
-
-npm:
+Published to GitHub Packages (token required even for public packages). Full
+auth examples: [README.md](../README.md#installation). Minimal npm setup:
 
 ```bash
 echo "@llevintza:registry=https://npm.pkg.github.com" >> ~/.npmrc
+echo "//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}" >> ~/.npmrc
+npm install @llevintza/fastify-prometheus-metrics
 ```
+
+Yarn (Berry) equivalent: set `npmScopes.llevintza.npmAuthToken` in `.yarnrc.yml`
+(or the user yarnrc) to the same token.
 
 ## Layout
 

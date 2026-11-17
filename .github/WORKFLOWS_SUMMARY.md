@@ -37,37 +37,38 @@ Retired (function folded elsewhere or replaced by Dependabot):
 
 ## CI/CD jobs (`ci.yml`)
 
-| Job                   | Purpose                                                                  |
-| --------------------- | ------------------------------------------------------------------------ |
-| Setup                 | Composite Node/Yarn install (required check name; does not serialize CI) |
-| TypeScript Type Check | `yarn type-check`                                                        |
-| Lint & Format Check   | ESLint, Prettier, madge circular check                                   |
-| Security Audit        | Soft `yarn npm audit` + `ci-audit-report` artifact                       |
-| Build                 | `yarn build`, verify `dist/`, bundle size in Summary, `build-artifacts`  |
-| Test (Node 22/24/26)  | `yarn test:coverage` + thresholds; `test-results-node-*`                 |
-| Package Validation    | package.json + import smoke test on downloaded `dist/`                   |
-| Dependabot Docs Sync  | PR-only: fail if Dependabot automation changed without a hub update      |
-| PR Checks             | Upserts short PR comment; full table in Summary (`if: always()`)         |
-| Release               | `yarn semantic-release` on `main` push only                              |
-| CI Success            | Aggregates gate results for branch protection                            |
+| Job                   | Purpose                                                                   |
+| --------------------- | ------------------------------------------------------------------------- |
+| Setup                 | No-op status check required by ruleset; real install is per-job composite |
+| TypeScript Type Check | `yarn type-check`                                                         |
+| Lint & Format Check   | ESLint, Prettier, madge circular check                                    |
+| Security Audit        | Soft `yarn npm audit` + `ci-audit-report` artifact                        |
+| Build                 | `yarn build`, verify `dist/`, bundle size in Summary, `build-artifacts`   |
+| Test (Node 22/24/26)  | `yarn test:coverage` + thresholds; `test-results-node-*`                  |
+| Package Validation    | package.json + import smoke test on downloaded `dist/`                    |
+| Dependabot Docs Sync  | PR-only: fail if Dependabot automation changed without a hub update       |
+| PR Checks             | Upserts short PR comment; full table in Summary (`!cancelled()`)          |
+| Release               | `yarn semantic-release` on `main` push only                               |
+| CI Success            | Aggregates gate results for branch protection                             |
 
 Shared setup:
 [`.github/actions/setup-node-yarn`](actions/setup-node-yarn/action.yml).
 
 ## Security Analysis (`security.yml`)
 
-| Check             | Notes                                                 |
-| ----------------- | ----------------------------------------------------- |
-| CodeQL            | Uploads to Security → Code scanning                   |
-| Semgrep           | Pinned `semgrep/semgrep-action@v1`; continue-on-error |
-| TruffleHog        | Pinned release tag; verified secrets only             |
-| Weekly yarn audit | Schedule only → `security-reports` artifact           |
+| Check             | Notes                                                         |
+| ----------------- | ------------------------------------------------------------- |
+| CodeQL            | Uploads to Security → Code scanning                           |
+| Semgrep           | Pinned `semgrep/semgrep:1.110.0` container; continue-on-error |
+| TruffleHog        | Action + scanner `version: 3.99.9`; verified secrets only     |
+| Weekly yarn audit | Schedule only → `security-reports` artifact                   |
 
 PR comment: short pointer (`<!-- ci-report:security -->`), not vuln lists.
 
 ## Required checks (branch protection)
 
-Keep these as required status checks (names must match job `name:` fields):
+Mirror the live `main-branch-protection` ruleset contexts (names must match job
+`name:` fields):
 
 1. Setup
 2. CI Success
@@ -77,14 +78,13 @@ Keep these as required status checks (names must match job `name:` fields):
 6. Build
 7. Test (Node.js 22)
 8. Test (Node.js 24)
-9. Test (Node.js 26)
-10. Package Validation
+9. Package Validation
+10. PR Checks
 11. Security Vulnerability Scan (from Security Analysis)
 
-Remove **Code Quality Analysis** from required checks if it was still listed
-(workflow retired). Keep **Setup** until rulesets are updated — the job remains
-so the required check stays discoverable while other jobs use the same composite
-action in parallel.
+**Not** required by the ruleset today: Test (Node.js 26) (still runs in CI).
+**Setup** stays as a cheap no-op until the ruleset drops that context; real
+Node/Yarn install is `.github/actions/setup-node-yarn` in each job.
 
 ## Coverage thresholds
 

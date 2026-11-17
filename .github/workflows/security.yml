@@ -13,7 +13,6 @@ permissions:
   contents: read
   actions: read
   security-events: write
-  pull-requests: write
 
 jobs:
   security-scan:
@@ -25,6 +24,7 @@ jobs:
         with:
           # TruffleHog needs history to diff the commit range.
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -36,19 +36,22 @@ jobs:
 
       - name: Run Semgrep
         continue-on-error: true
-        uses: semgrep/semgrep-action@v1
+        uses: docker://semgrep/semgrep:1.110.0
         with:
-          config: >-
-            p/security-audit
-            p/secrets
-            p/javascript
-            p/typescript
-            p/nodejs
+          args: >-
+            scan
+            --config=p/security-audit
+            --config=p/secrets
+            --config=p/javascript
+            --config=p/typescript
+            --config=p/nodejs
+            .
 
       - name: Check for secrets in code
         uses: trufflesecurity/trufflehog@v3.99.9
         with:
           path: ./
+          version: 3.99.9
           extra_args: --only-verified
 
       - name: Setup Node/Yarn for weekly audit
@@ -57,6 +60,8 @@ jobs:
 
       - name: Weekly dependency audit artifact
         if: always() && github.event_name == 'schedule'
+        env:
+          YARN_ENABLE_COLORS: '0'
         run: |
           set +e
           yarn npm audit -A -R > audit-report.txt 2>&1
@@ -79,10 +84,12 @@ jobs:
           if-no-files-found: ignore
 
       - name: Write summary and upsert PR pointer
-        if: always() && github.event_name == 'pull_request'
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
         uses: actions/github-script@v9
+        env:
+          REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
         with:
-          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || github.token }}
           script: |
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const summary = [
@@ -97,7 +104,7 @@ jobs:
             ].join('\n');
             await core.summary.addRaw(summary, true).write();
 
-            if (!process.env.GITHUB_TOKEN) {
+            if (!process.env.REPORT_TOKEN) {
               core.warning('CODE_QUALITY_REPORT_TOKEN unavailable; skipping PR comment upsert');
               return;
             }
@@ -111,13 +118,13 @@ jobs:
               '- Dependency audit: see **CI/CD** check / `ci-audit-report` artifact',
             ].join('\n');
 
-            const { data: comments } = await github.rest.issues.listComments({
+            const comments = await github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: context.issue.number,
               per_page: 100,
             });
-            const existing = comments.find((c) => c.body && c.body.includes(marker));
+            const existing = comments.find((c) => c.body && c.body.startsWith(marker));
             if (existing) {
               await github.rest.issues.updateComment({
                 owner: context.repo.owner,
