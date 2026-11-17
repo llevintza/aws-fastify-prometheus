@@ -19,6 +19,15 @@ permissions:
   statuses: write
 
 jobs:
+  # Keep job name "Setup" for branch-protection required checks. Uses the local
+  # composite action; other jobs do not needs: this, so the graph stays parallel.
+  setup:
+    name: Setup
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/setup-node-yarn
+
   type-check:
     name: TypeScript Type Check
     runs-on: ubuntu-latest
@@ -296,6 +305,83 @@ jobs:
               });
             }
 
+  docs-sync-dependabot:
+    name: Dependabot Docs Sync
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Require hub update when Dependabot automation changes
+        run: |
+          set -euo pipefail
+          BASE="${{ github.event.pull_request.base.sha }}"
+          HEAD="${{ github.sha }}"
+          mapfile -t changed < <(git diff --name-only "$BASE...$HEAD")
+
+          automation=(
+            .github/dependabot.yml
+            .github/workflows/dependabot-stack.yml
+            .github/workflows/dependabot-auto-merge.yml
+            .github/scripts/stack-dependabot-prs.sh
+            scripts/semantic-release-analyze-commits.js
+          )
+          hubs=(
+            .github/WORKFLOWS_SUMMARY.md
+            docs/RELEASE_GUIDE.md
+          )
+
+          auto_hit=()
+          for path in "${automation[@]}"; do
+            for c in "${changed[@]}"; do
+              if [[ "$c" == "$path" ]]; then
+                auto_hit+=("$path")
+                break
+              fi
+            done
+          done
+
+          if [[ ${#auto_hit[@]} -eq 0 ]]; then
+            echo "No Dependabot automation paths changed; docs sync gate is a no-op."
+            exit 0
+          fi
+
+          hub_hit=()
+          for path in "${hubs[@]}"; do
+            for c in "${changed[@]}"; do
+              if [[ "$c" == "$path" ]]; then
+                hub_hit+=("$path")
+                break
+              fi
+            done
+          done
+
+          {
+            echo "## Dependabot docs sync"
+            echo ""
+            echo "Automation changed:"
+            printf -- '- `%s`\n' "${auto_hit[@]}"
+            echo ""
+            if [[ ${#hub_hit[@]} -gt 0 ]]; then
+              echo "Hub(s) updated:"
+              printf -- '- `%s`\n' "${hub_hit[@]}"
+            else
+              echo "Hub(s) updated: *(none)*"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [[ ${#hub_hit[@]} -eq 0 ]]; then
+            echo "::error::Dependabot automation changed without updating a docs hub."
+            echo "Changed automation: ${auto_hit[*]}"
+            echo "Update at least one of:"
+            printf -- '  - %s\n' "${hubs[@]}"
+            echo "Behavior SSOT is the automation files; hubs stay thin (see AGENTS.md)."
+            exit 1
+          fi
+
+          echo "Docs hubs updated alongside automation: ${hub_hit[*]}"
+
   release:
     name: Release
     runs-on: ubuntu-latest
@@ -329,26 +415,48 @@ jobs:
   ci-success:
     name: CI Success
     runs-on: ubuntu-latest
-    needs: [type-check, lint-and-format, security-audit, build, test, package-validation]
+    needs:
+      [
+        setup,
+        type-check,
+        lint-and-format,
+        security-audit,
+        build,
+        test,
+        package-validation,
+        docs-sync-dependabot,
+      ]
     if: always()
     steps:
       - name: Check overall status
         run: |
+          # docs-sync-dependabot is PR-only; skipped on push is OK.
           jobs=(
+            "setup:${{ needs.setup.result }}"
             "type-check:${{ needs.type-check.result }}"
             "lint-and-format:${{ needs.lint-and-format.result }}"
             "security-audit:${{ needs.security-audit.result }}"
             "build:${{ needs.build.result }}"
             "test:${{ needs.test.result }}"
             "package-validation:${{ needs.package-validation.result }}"
+            "docs-sync-dependabot:${{ needs.docs-sync-dependabot.result }}:allow_skip"
           )
           failed=()
           for job in "${jobs[@]}"; do
             name="${job%%:*}"
-            status="${job##*:}"
-            if [[ "$status" != "success" ]]; then
-              failed+=("$name")
+            rest="${job#*:}"
+            status="${rest%%:*}"
+            allow_skip=0
+            if [[ "$rest" == *":allow_skip" ]]; then
+              allow_skip=1
             fi
+            if [[ "$status" == "success" ]]; then
+              continue
+            fi
+            if [[ "$allow_skip" -eq 1 && "$status" == "skipped" ]]; then
+              continue
+            fi
+            failed+=("$name")
           done
           if [[ ${#failed[@]} -gt 0 ]]; then
             echo "CI failed: ${failed[*]}"

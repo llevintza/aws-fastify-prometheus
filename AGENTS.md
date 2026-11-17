@@ -17,8 +17,8 @@ manager is Yarn 4 through corepack.
 Known gap: `AwsMetricsExporter.sendMetricsToCloudWatch` is still a placeholder
 (`setTimeout` only). It buffers and has flush/batch timer logic, but it does
 **not** call the AWS SDK — `@aws-sdk/client-cloudwatch` is a declared dependency
-and is not imported anywhere under `src/`. Wiring real export means importing the
-SDK in that method. The feature backlog lives in GitHub issues labelled
+and is not imported anywhere under `src/`. Wiring real export means importing
+the SDK in that method. The feature backlog lives in GitHub issues labelled
 `enhancement`.
 
 ## Commands
@@ -70,8 +70,8 @@ docs/                      # branching, release, Dependabot, security docs
 The codebase has **two independent, non-connected metrics APIs**. Changing one
 does not affect the other:
 
-1. **The Fastify plugin** (`src/plugin.ts`) — the primary product. Registered via
-   `fastify-plugin` (`fp`). It builds metric instances directly from
+1. **The Fastify plugin** (`src/plugin.ts`) — the primary product. Registered
+   via `fastify-plugin` (`fp`). It builds metric instances directly from
    `prom-client` (`Counter` / `Gauge` / `Histogram` / `Summary`), stores them in
    a local `Map`, wires `onRequest` / `onResponse` hooks, exposes `/metrics`,
    and decorates the instance as `fastify.prometheus` (typed by
@@ -87,8 +87,8 @@ the three classes, and public types.
 
 ### Plugin request metrics
 
-- `onRequest` stamps `request.startTime`; `onResponse` computes duration, applies
-  `excludeRoutes` / `includeRoutes` filtering against
+- `onRequest` stamps `request.startTime`; `onResponse` computes duration,
+  applies `excludeRoutes` / `includeRoutes` filtering against
   `request.routerPath ?? request.url`, then calls `recordHttpMetrics`.
 - Route matching is **substring-based** (`route.includes(...)`), not glob —
   despite README examples like `/api/*`.
@@ -102,10 +102,11 @@ the three classes, and public types.
 
 - Strict TypeScript (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`,
   `noPropertyAccessFromIndexSignature`, `noUnusedLocals` / `Parameters` are on).
-  Use `import type` for type-only imports. Don't use `any`. Build optional config
-  objects field-by-field (conditionally assign `labelNames` / `buckets`) rather
-  than spreading, or `exactOptionalPropertyTypes` will fail. Anything added to
-  the public API is added to `src/types.ts` and exported from `src/index.ts`.
+  Use `import type` for type-only imports. Don't use `any`. Build optional
+  config objects field-by-field (conditionally assign `labelNames` / `buckets`)
+  rather than spreading, or `exactOptionalPropertyTypes` will fail. Anything
+  added to the public API is added to `src/types.ts` and exported from
+  `src/index.ts`.
 - `tsconfig.json` excludes `tests/`; tests are compiled by `ts-jest`.
 - Changes to the plugin's behaviour are **opt-in** unless Leo explicitly
   approves a breaking change. A breaking change means a `feat!:` or
@@ -136,6 +137,29 @@ the three classes, and public types.
 - CI tokens: workflows use purpose-specific **classic** PATs only (for example
   `XOON_NPM_PUBLISH_TOKEN`). Never introduce `secrets.GITHUB_TOKEN` or
   fine-grained PATs, because GitHub Packages rejects them.
+
+### Dependabot docs sync
+
+Dependabot **behavior** lives next to the automation — not in long markdown
+dumps. Canonical homes:
+
+| Concern                           | SSOT                                                                                                   |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| Schedule, groups, labels, ignores | `.github/dependabot.yml`                                                                               |
+| Stack / restack mechanics         | `.github/workflows/dependabot-stack.yml` + `.github/scripts/stack-dependabot-prs.sh` (header comments) |
+| Auto-merge confidence / holds     | `.github/workflows/dependabot-auto-merge.yml`                                                          |
+| Semver contract scoring           | `scripts/semantic-release-analyze-commits.js`                                                          |
+
+Thin hubs only link and capture operator policy:
+
+- Inventory / triggers → `.github/WORKFLOWS_SUMMARY.md`
+- Merge / hold / release contract → `docs/RELEASE_GUIDE.md`
+
+Any PR that changes those automation paths **must** update the matching hub(s)
+(often both). CI job **Dependabot Docs Sync** fails the PR if automation changed
+and neither hub did. Prefer improving workflow/script header comments over new
+narrative docs. **Never** reintroduce `DEPENDABOT_*.md` status/history dumps
+under the repo root or `docs/`.
 
 ## Conventional Commits (enforced)
 
