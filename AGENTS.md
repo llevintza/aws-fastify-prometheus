@@ -15,14 +15,17 @@ Node `>=22` is supported, and dev and CI use Node 24 (`.nvmrc`). The package
 manager is Yarn 4 through corepack.
 
 Known gap: `AwsMetricsExporter.sendMetricsToCloudWatch` is still a placeholder
-that sends nothing. The feature backlog lives in GitHub issues labelled
+(`setTimeout` only). It buffers and has flush/batch timer logic, but it does
+**not** call the AWS SDK — `@aws-sdk/client-cloudwatch` is a declared dependency
+and is not imported anywhere under `src/`. Wiring real export means importing the
+SDK in that method. The feature backlog lives in GitHub issues labelled
 `enhancement`.
 
 ## Commands
 
 ```sh
 corepack enable && yarn install   # also installs husky git hooks via "prepare"
-yarn build            # tsc -> dist/
+yarn build            # tsc -> dist/ (also .d.ts + sourcemaps)
 yarn type-check       # tsc --noEmit
 yarn lint             # ESLint (src, tests)
 yarn format:check     # Prettier check (yarn format to write)
@@ -30,9 +33,20 @@ yarn test             # Jest (ts-jest); yarn test:coverage for thresholds
 yarn madge --circular --extensions ts src/   # CI fails on circular imports
 ```
 
+Run a single test file or test by name:
+
+```sh
+yarn test tests/plugin.test.ts
+yarn test -t "should collect HTTP metrics"
+```
+
+This is a library, not an app. There is no real CLI or long-running dev server;
+`yarn dev` only runs `src/index.ts` (re-exports).
+
 Before finishing any change, `yarn lint`, `yarn format:check`, `yarn type-check`
 and `yarn test:coverage` must all pass. Coverage must stay at or above the
-thresholds in `jest.config.js`.
+thresholds in `jest.config.js` (branches 40 / functions 24 / lines 45 /
+statements 45). The standalone class API is largely untested.
 
 ## Layout
 
@@ -51,11 +65,48 @@ examples/                  # basic.ts, advanced.ts
 docs/                      # branching, release, Dependabot, security docs
 ```
 
+## Architecture
+
+The codebase has **two independent, non-connected metrics APIs**. Changing one
+does not affect the other:
+
+1. **The Fastify plugin** (`src/plugin.ts`) — the primary product. Registered via
+   `fastify-plugin` (`fp`). It builds metric instances directly from
+   `prom-client` (`Counter` / `Gauge` / `Histogram` / `Summary`), stores them in
+   a local `Map`, wires `onRequest` / `onResponse` hooks, exposes `/metrics`,
+   and decorates the instance as `fastify.prometheus` (typed by
+   `FastifyPrometheusContext`). Plugin config types live in `src/types.ts`.
+2. **The standalone class API** (`src/prometheus-metrics.ts` +
+   `src/metrics-collector.ts`) — `PrometheusMetrics` wraps a `MetricsCollector`.
+   Exported from `src/index.ts` but **not used by the plugin**. It uses
+   `src/interfaces.ts` and a different set of config types (`PrometheusConfig`,
+   `MetricConfig`, `CollectorOptions`) also in `src/types.ts`.
+
+`src/index.ts` is the public surface: default + named `fastifyPrometheusPlugin`,
+the three classes, and public types.
+
+### Plugin request metrics
+
+- `onRequest` stamps `request.startTime`; `onResponse` computes duration, applies
+  `excludeRoutes` / `includeRoutes` filtering against
+  `request.routerPath ?? request.url`, then calls `recordHttpMetrics`.
+- Route matching is **substring-based** (`route.includes(...)`), not glob —
+  despite README examples like `/api/*`.
+- Status classification: `>= 400` → error, `200–399` → success (both counters
+  recorded per request when enabled).
+- Keep `fastify.d.ts` / the `plugin.ts` module augmentation
+  (`request.startTime`, `instance.prometheus`) in sync with
+  `FastifyPrometheusContext` in `types.ts`.
+
 ## Code conventions
 
-- Strict TypeScript. Use `import type` for type-only imports. Don't use `any`.
-  Anything added to the public API is added to `src/types.ts` and exported from
-  `src/index.ts`.
+- Strict TypeScript (`exactOptionalPropertyTypes`, `noUncheckedIndexedAccess`,
+  `noPropertyAccessFromIndexSignature`, `noUnusedLocals` / `Parameters` are on).
+  Use `import type` for type-only imports. Don't use `any`. Build optional config
+  objects field-by-field (conditionally assign `labelNames` / `buckets`) rather
+  than spreading, or `exactOptionalPropertyTypes` will fail. Anything added to
+  the public API is added to `src/types.ts` and exported from `src/index.ts`.
+- `tsconfig.json` excludes `tests/`; tests are compiled by `ts-jest`.
 - Changes to the plugin's behaviour are **opt-in** unless Leo explicitly
   approves a breaking change. A breaking change means a `feat!:` or
   `BREAKING CHANGE:` commit and a major release.
@@ -79,7 +130,8 @@ docs/                      # branching, release, Dependabot, security docs
 - Releases: merging to `main` triggers the CI `Release` job
   (`yarn semantic-release`), which publishes to GitHub Packages. `feat` gives a
   minor release, `fix`/`perf` a patch, and `!`/`BREAKING CHANGE` a major.
-  `chore`, `docs`, `test` and `ci` don't release. See
+  `chore`, `docs`, `test` and `ci` don't release. Do **not** hand-edit `version`
+  in `package.json` or `CHANGELOG.md` — the release pipeline owns them. See
   `docs/BRANCHING_STRATEGY.md` and `docs/RELEASE_GUIDE.md`.
 - CI tokens: workflows use purpose-specific **classic** PATs only (for example
   `XOON_NPM_PUBLISH_TOKEN`). Never introduce `secrets.GITHUB_TOKEN` or
