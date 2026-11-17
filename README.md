@@ -319,9 +319,44 @@ await fastify.register(fastifyPrometheusPlugin, {
 | `httpMetrics`            | `HttpMetricsConfig`        | See defaults                  | HTTP metrics configuration                                       |
 | `customMetrics`          | `CustomMetricDefinition[]` | `[]`                          | Custom metrics definitions                                       |
 | `awsCloudWatch`          | `AwsExporterConfig`        | `undefined`                   | AWS CloudWatch integration                                       |
-| `excludeRoutes`          | `string[]`                 | `['/health', '/healthcheck']` | Routes to exclude                                                |
-| `includeRoutes`          | `string[]`                 | `undefined`                   | Routes to include (if specified, only these routes are included) |
+| `excludeRoutes`          | `RouteMatcher[]`           | `['/health', '/healthcheck']` | Routes to exclude (see [Route filtering](#route-filtering))      |
+| `includeRoutes`          | `RouteMatcher[]`           | `undefined`                   | Routes to include (if specified, only these routes are included) |
+| `routeMatch`             | `'substring' \| 'exact'`   | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`       |
+| `unmatchedRouteLabel`    | `string`                   | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset    |
 | `defaultLabels`          | `Record<string, string>`   | `{}`                          | Default labels for all metrics                                   |
+
+### Route filtering
+
+Filters are applied to the `route` label value: the registered route pattern
+(for example `/users/:id`), or, for unmatched requests, `unmatchedRouteLabel` if
+set and the raw URL otherwise. Each entry in `excludeRoutes` / `includeRoutes`
+is a `RouteMatcher`:
+
+- a `string`, matched with `String.includes()` by default, or by equality with
+  `routeMatch: 'exact'`
+- a `RegExp`, tested against the route (`routeMatch` does not apply)
+- a function `(route: string) => boolean`
+
+A route is skipped if it matches any `excludeRoutes` entry, or if
+`includeRoutes` is non-empty and the route matches none of its entries.
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  routeMatch: 'exact', // '/health' no longer drops '/healthcare'
+  excludeRoutes: [
+    '/health',
+    /^\/internal\//,
+    route => route.endsWith('/debug'),
+  ],
+  unmatchedRouteLabel: '__unmatched__', // all 404s share one label value
+});
+
+// Per-route opt-out
+fastify.get('/ping', { config: { metrics: false } }, async () => 'pong');
+```
+
+The filter logic is exported as a pure helper, `shouldRecord(route, config)`, if
+you need the same decision elsewhere.
 
 ## TypeScript Support
 
@@ -364,7 +399,12 @@ fastify.prometheus.incrementCounter('my_counter', { label: 'value' });
 1. **Metric Naming**: Follow Prometheus naming conventions (`snake_case`,
    descriptive names)
 2. **Label Cardinality**: Keep the number of unique label combinations
-   reasonable to avoid high cardinality
+   reasonable to avoid high cardinality. By default, requests that match no
+   route (404 scanners, typos, URLs with IDs or query strings) use the raw URL
+   as the `route` label, so every distinct URL creates new time series. Set
+   `unmatchedRouteLabel: '__unmatched__'` to collapse them into one series, and
+   prefer `routeMatch: 'exact'` so `excludeRoutes` entries don't accidentally
+   drop similarly named routes
 3. **Histogram Buckets**: Choose buckets that make sense for your use case
 4. **Route Filtering**: Exclude health check and internal routes from metrics
 5. **Custom Metrics**: Define custom metrics that provide business value

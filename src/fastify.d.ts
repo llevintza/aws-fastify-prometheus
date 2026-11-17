@@ -19,4 +19,11 @@ declare module 'fastify' {
      */
     startTime?: number;
   }
+
+  interface FastifyContextConfig {
+    /**
+     * Set to `false` to skip HTTP metrics for this route
+     */
+    metrics?: boolean;
+  }
 }
