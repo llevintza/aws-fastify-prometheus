@@ -7,6 +7,7 @@ import fp from 'fastify-plugin';
 import { register, collectDefaultMetrics, Counter, Gauge, Histogram, Summary } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
+import { shouldRecord } from './route-filter';
 import type {
   FastifyPrometheusOptions,
   HttpRequestMetrics,
@@ -127,25 +128,21 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   });
 
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
-    const route = request.routeOptions.url ?? request.url;
-
-    // Skip excluded routes
-    if (
-      config.excludeRoutes &&
-      config.excludeRoutes.length > 0 &&
-      config.excludeRoutes.some(excludedRoute => route.includes(excludedRoute))
-    ) {
+    // Per-route opt-out: fastify.get('/x', { config: { metrics: false } }, handler)
+    // `config` is typed as always set; the optional chain guards unusual not-found paths anyway.
+    if (request.routeOptions.config?.metrics === false) {
       return;
     }
 
-    // Skip if only specific routes are included and this route is not included
-    if (
-      config.includeRoutes &&
-      config.includeRoutes.length > 0 &&
-      !config.includeRoutes.some(includedRoute => route.includes(includedRoute))
-    ) {
+    // Decide record/skip on the matched pattern or the raw URL, then pick the emitted label.
+    const matchedRoute = request.routeOptions.url;
+    if (!shouldRecord(matchedRoute ?? request.url, config)) {
       return;
     }
+
+    const route =
+      matchedRoute ??
+      (typeof config.unmatchedRouteLabel === 'string' ? config.unmatchedRouteLabel : request.url);
 
     const duration = typeof request.startTime === 'number' ? Date.now() - request.startTime : 0;
     const labels = {
@@ -642,6 +639,11 @@ declare module 'fastify' {
 
   interface FastifyInstance {
     prometheus: FastifyPrometheusContext;
+  }
+
+  interface FastifyContextConfig {
+    /** Set to `false` to skip HTTP metrics for this route */
+    metrics?: boolean;
   }
 }
 

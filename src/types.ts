@@ -84,13 +84,49 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
   awsCloudWatch?: AwsExporterConfig;
 
   /** Exclude specific routes from metrics collection */
-  excludeRoutes?: string[];
+  excludeRoutes?: RouteMatcher[];
 
   /** Include only specific routes in metrics collection */
-  includeRoutes?: string[];
+  includeRoutes?: RouteMatcher[];
+
+  /**
+   * How string entries in `excludeRoutes` / `includeRoutes` are matched.
+   * Defaults to `'substring'`.
+   */
+  routeMatch?: RouteMatchMode;
+
+  /**
+   * Label used for the `route` label when a request matched no registered route
+   * (for example a 404). When unset, the raw request URL is used.
+   */
+  unmatchedRouteLabel?: string;
 
   /** Custom labels to add to all metrics */
   defaultLabels?: Record<string, string>;
+}
+
+/**
+ * A route filter entry: a string (matched per `routeMatch`), a RegExp, or a predicate
+ */
+export type RouteMatcher = string | RegExp | ((route: string) => boolean);
+
+/**
+ * How string route matchers are compared with the route label
+ */
+export type RouteMatchMode = 'substring' | 'exact';
+
+/**
+ * Route filter settings consumed by `shouldRecord`
+ */
+export interface RouteFilterConfig {
+  /** Routes to skip */
+  excludeRoutes?: RouteMatcher[];
+
+  /** When non-empty, only matching routes are recorded */
+  includeRoutes?: RouteMatcher[];
+
+  /** String matching mode (default `'substring'`) */
+  routeMatch?: RouteMatchMode;
 }
 
 /**
