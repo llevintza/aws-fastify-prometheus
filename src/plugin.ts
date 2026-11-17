@@ -186,12 +186,14 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   void fastify.addHook('onRequest', async (request: FastifyRequest) => {
     request.startTime = process.hrtime.bigint();
 
-    if (inFlightGauge !== undefined && isRouteRecorded(request)) {
+    const recorded = isRouteRecorded(request);
+
+    if (inFlightGauge !== undefined && recorded) {
       inFlightGauge.inc({ method: request.method });
       inFlightRequests.add(request);
     }
 
-    if (exemplarExtractor !== undefined && isRouteRecorded(request)) {
+    if (exemplarExtractor !== undefined && recorded) {
       const exemplarLabels = safeExtractExemplar(exemplarExtractor, request);
       if (exemplarLabels !== undefined) {
         requestExemplars.set(request, exemplarLabels);

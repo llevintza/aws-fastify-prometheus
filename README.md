@@ -368,6 +368,14 @@ still active (tracing instrumentations often end the span before `onResponse`).
 If nothing is captured there, the extractor runs once more in `onResponse`, so
 labels set by a route handler are also picked up.
 
+Register your OpenTelemetry instrumentation (for example `@fastify/otel`) before
+this plugin, so its request span already exists when this plugin's `onRequest`
+hook runs. Otherwise the exemplar records the parent HTTP server span. If the
+instrumentation wraps each Fastify hook in its own span (as
+`@opentelemetry/instrumentation-fastify` does), `span_id` is that short hook
+span. `trace_id` is the same either way, so the exemplar still links to the
+right trace. If you need the request span's id, read it in a custom extractor.
+
 To supply exemplar labels yourself, pass a function instead of `true`. Return
 `undefined` to skip the exemplar for that request:
 
@@ -387,9 +395,10 @@ await fastify.register(fastifyPrometheusPlugin, {
 
 Exemplar labels must be a valid OpenMetrics label set: label names match
 `[a-zA-Z_][a-zA-Z0-9_]*`, values are strings, and the names and values together
-are at most 128 characters. An invalid label set, or an extractor that throws,
-is dropped and the observation is recorded without an exemplar, so one bad
-request can't break the `/metrics` output.
+are at most 128 characters (UTF-16 code units, as prom-client counts them). An
+invalid label set, or an extractor that throws, is dropped and the observation
+is recorded without an exemplar, so one bad request can't break the `/metrics`
+output.
 
 Only the plugin's own request hooks attach exemplars. The `fastify.prometheus`
 helpers (`incrementCounter`, `observeHistogram`, `recordHttpRequest`) keep

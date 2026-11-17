@@ -20,7 +20,10 @@ export interface OtelTraceApi {
 const INVALID_TRACE_ID = /^0+$/;
 /** W3C trace-context `sampled` flag */
 const TRACE_FLAG_SAMPLED = 0x01;
-/** OpenMetrics: the combined length of exemplar label names and values is at most 128 */
+/**
+ * OpenMetrics: exemplar label names and values together are at most 128 characters. Counted in
+ * UTF-16 code units (`string.length`) like prom-client, which is never looser than its check.
+ */
 const MAX_EXEMPLAR_LABEL_CHARS = 128;
 const LABEL_NAME = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
@@ -83,7 +86,7 @@ export function sanitizeExemplarLabels(labels: unknown): ExemplarLabels | undefi
     if (!LABEL_NAME.test(name) || typeof value !== 'string') {
       return undefined;
     }
-    length += [...name].length + [...value].length;
+    length += name.length + value.length;
     result[name] = value;
   }
   return length <= MAX_EXEMPLAR_LABEL_CHARS ? result : undefined;

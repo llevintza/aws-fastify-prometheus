@@ -732,6 +732,10 @@ describe('Fastify Prometheus Plugin', () => {
           if (traceId === 'throw') {
             throw new Error('extractor failure');
           }
+          if (traceId === 'astral') {
+            // 70 code points but 132 UTF-16 code units: prom-client would reject it
+            return { trace_id: '\u{1F600}'.repeat(62) };
+          }
           return typeof traceId === 'string' ? { trace_id: traceId } : undefined;
         },
       });
@@ -742,6 +746,11 @@ describe('Fastify Prometheus Plugin', () => {
         url: '/test',
         headers: { 'x-trace-id': 'a'.repeat(200) },
       });
+      const astral = await fastify.inject({
+        method: 'GET',
+        url: '/test',
+        headers: { 'x-trace-id': 'astral' },
+      });
       const failing = await fastify.inject({
         method: 'GET',
         url: '/test',
@@ -751,12 +760,14 @@ describe('Fastify Prometheus Plugin', () => {
       const body = (await fastify.inject({ method: 'GET', url: '/metrics' })).body;
 
       expect(oversized.statusCode).toBe(200);
+      expect(astral.statusCode).toBe(200);
       expect(failing.statusCode).toBe(200);
       expect(body).not.toContain('undefined');
       expect(body).not.toContain('# {}');
       expect(body).not.toContain('a'.repeat(200));
-      expect(body).toMatch(/http_requests_total\{[^}]*route="\/test"[^}]*\} 3 # \{trace_id=/);
-      expect(body).toMatch(/http_request_duration_ms_count\{[^}]*route="\/test"[^}]*\} 3\n/);
+      expect(body).not.toContain('\u{1F600}');
+      expect(body).toMatch(/http_requests_total\{[^}]*route="\/test"[^}]*\} 4 # \{trace_id=/);
+      expect(body).toMatch(/http_request_duration_ms_count\{[^}]*route="\/test"[^}]*\} 4\n/);
 
       await fastify.close();
     });

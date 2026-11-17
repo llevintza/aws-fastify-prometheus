@@ -113,6 +113,11 @@ describe('exemplar helpers', () => {
       expect(sanitizeExemplarLabels({ t: 'x'.repeat(127) })).toEqual({ t: 'x'.repeat(127) });
     });
 
+    test('accepts astral characters up to 128 UTF-16 code units', () => {
+      const value = `x${'\u{1F600}'.repeat(63)}`;
+      expect(sanitizeExemplarLabels({ t: value })).toEqual({ t: value });
+    });
+
     test.each([
       ['undefined', undefined],
       ['null', null],
@@ -123,7 +128,8 @@ describe('exemplar helpers', () => {
       ['a label name starting with a digit', { '1trace': TRACE_ID }],
       ['a non-string value', { trace_id: 42 }],
       ['more than 128 characters', { trace_id: 'x'.repeat(200) }],
-      ['more than 128 code points', { t: '\u{1F600}'.repeat(128) }],
+      // 65 code points but 129 UTF-16 code units, which is what prom-client counts
+      ['astral characters over 128 UTF-16 code units', { t: '\u{1F600}'.repeat(64) }],
     ])('drops %s', (_description, labels) => {
       expect(sanitizeExemplarLabels(labels)).toBeUndefined();
     });
