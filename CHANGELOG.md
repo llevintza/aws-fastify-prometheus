@@ -1,3 +1,19 @@
+## [2.3.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.2.0...v2.3.0) (2026-11-17)
+
+### Features
+
+* **otel:** add OpenMetrics output and OpenTelemetry tracing exemplars ([7cb1df1](https://github.com/llevintza/aws-fastify-prometheus/commit/7cb1df1a21f809fef496629691624b840c31fbd5)), closes [#246](https://github.com/llevintza/aws-fastify-prometheus/issues/246)
+
+### Bug Fixes
+
+* **otel:** capture exemplars at request start and drop invalid ones ([e50b85e](https://github.com/llevintza/aws-fastify-prometheus/commit/e50b85eba628fcb8f5ad7b3fa2673cd1e5c4311a))
+* **otel:** count exemplar label length in UTF-16 code units ([d08ad7c](https://github.com/llevintza/aws-fastify-prometheus/commit/d08ad7c81facdd3c43e15ff0cd55435de81f0ea4))
+* **routes:** ignore query string in exact route matching ([81c8496](https://github.com/llevintza/aws-fastify-prometheus/commit/81c84967bf7e0221de104588a6c59fa5d2b10991)), closes [#245](https://github.com/llevintza/aws-fastify-prometheus/issues/245) [#250](https://github.com/llevintza/aws-fastify-prometheus/issues/250)
+
+### Miscellaneous Chores
+
+* merge origin/main into feat/otel-exemplars-openmetrics ([c977a3c](https://github.com/llevintza/aws-fastify-prometheus/commit/c977a3c4db7cd627c94f0ddeee86aa5d281602d7)), closes [#245](https://github.com/llevintza/aws-fastify-prometheus/issues/245) [#244](https://github.com/llevintza/aws-fastify-prometheus/issues/244)
+
 ## [2.2.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.1.0...v2.2.0) (2026-11-17)
 
 ### Features
