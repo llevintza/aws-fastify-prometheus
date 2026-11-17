@@ -1,263 +1,42 @@
-# Contributing to @llevintza/fastify-prometheus-metrics
-
-Thank you for your interest in contributing to `@llevintza/fastify-prometheus-metrics`! We welcome contributions from everyone and have established a streamlined process to make contributing as easy as possible.
-
-## Code of Conduct
-
-This project and everyone participating in it is governed by our Code of Conduct. By participating, you are expected to uphold this code.
-
-## Quick Links
-
-- 📋 [Branching and Release Strategy](./docs/BRANCHING_STRATEGY.md)
-- 🛠️ [Development Guide](./docs/DEVELOPMENT.md)
-- 🐛 [Report a Bug](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=bug_report.yml)
-- 💡 [Request a Feature](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=feature_request.yml)
-
-## How to Contribute
-
-### Reporting Bugs
-
-Before creating bug reports, please check the existing issues as you might find out that you don't need to create one. When you are creating a bug report, please include as many details as possible using our bug report template.
-
-### Suggesting Enhancements
-
-Enhancement suggestions are tracked as GitHub issues. When creating an enhancement suggestion, please use our feature request template and provide as much detail as possible.
-
-### Pull Requests
-
-We follow a **trunk-based development** model with automated releases. Please read our [Branching Strategy](./docs/BRANCHING_STRATEGY.md) for detailed information.
-
-**Quick Overview:**
-1. Fork the repo and create a feature branch from `main`: `feature/your-feature-name`
-2. Develop your feature using [conventional commits](https://www.conventionalcommits.org/)
-3. Test your changes with the automatically generated alpha releases
-4. Create a pull request to merge back to `main`
-5. After review and approval, your changes will be included in the next stable release
-
-## Release Strategy Overview
-
-Our simplified 3-branch workflow automatically handles versioning:
-
-| Branch Pattern | Release Type | Example | Purpose |
-|----------------|--------------|---------|---------|
-| `main` | **Stable** | `1.0.0` | Production releases |
-| `release/*` | **Beta** | `1.1.0-beta.1` | Pre-release testing |
-| `feature/*` | **Alpha** | `1.1.0-alpha.2` | Feature development |
-
-**Automatic Alpha Testing**: Every push to a feature branch creates an alpha release for testing:
-```bash
-# Your feature branch
-git push origin feature/new-metrics
-
-# Automatically creates: 1.0.0-alpha.1, 1.0.0-alpha.2, etc.
-# Test with: npm install @llevintza/fastify-prometheus-metrics@alpha
-```
-
-## Development Setup
-
-### Prerequisites
-
-- **Node.js**: Version 22.0.0 or higher (we recommend using the latest LTS version). CI tests Node.js 22, 24, and 26.
-- **Yarn**: Version 4.6.0 (managed via Corepack)
-
-### Getting Started
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/llevintza/aws-fastify-prometheus.git
-   cd aws-fastify-prometheus
-   ```
-
-2. Set up the correct Node.js version (if using nvm):
-   ```bash
-   nvm use
-   ```
-
-3. Enable Corepack to use the correct Yarn version:
-   ```bash
-   corepack enable
-   ```
-   ```
-
-4. Install dependencies:
-   ```bash
-   yarn install
-   ```
-
-5. Run tests:
-   ```bash
-   yarn test
-   ```
-
-6. Run linting:
-   ```bash
-   yarn lint
-   ```
-
-5. Build the project:
-   ```bash
-   yarn build
-   ```
-
-## Branching and Release Workflow
-
-We follow a **trunk-based development** approach with automated releases. For complete details, see our [Branching Strategy Guide](./docs/BRANCHING_STRATEGY.md).
-
-### Feature Development
-
-1. **Create Feature Branch**:
-   ```bash
-   git checkout main
-   git pull origin main
-   git checkout -b feature/your-feature-name
-   ```
-
-2. **Develop and Test**:
-   ```bash
-   # Make your changes
-   git add .
-   git commit -m "feat: add new metrics configuration"
-   git push origin feature/your-feature-name
-   ```
-
-3. **Test Alpha Release**:
-   - Pushing to your feature branch automatically creates an alpha release (e.g., `1.0.0-alpha.1`)
-   - Test the alpha release to ensure your changes work correctly
-   - Install with: `npm install @llevintza/fastify-prometheus-metrics@alpha`
-
-4. **Create Pull Request**:
-   - Create PR from your feature branch to `main`
-   - Include thorough description and testing notes
-   - Reference any related issues
-
-### Commit Message Format
-
-We use [Conventional Commits](https://www.conventionalcommits.org/) for automated versioning and changelog generation:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-**Commit Types and Version Impact:**
-- `feat:` - New feature → **Minor version bump** (1.0.0 → 1.1.0)
-- `fix:` - Bug fix → **Patch version bump** (1.0.0 → 1.0.1)
-- `docs:` - Documentation changes → **Patch version bump**
-- `refactor:` - Code refactoring → **Patch version bump**
-- `perf:` - Performance improvements → **Patch version bump**
-- `test:` - Test changes → **No release**
-- `chore:` - Build/maintenance tasks → **No release**
-- `ci:` - CI/CD changes → **No release**
-
-**Breaking Changes:**
-- Add `!` after type: `feat!:` or `fix!:`
-- Add `BREAKING CHANGE:` in footer
-- Results in **Major version bump** (1.0.0 → 2.0.0)
-
-**Examples:**
-```bash
-# Feature addition (minor version bump)
-git commit -m "feat: add custom metric labels support"
-
-# Bug fix (patch version bump)
-git commit -m "fix: resolve memory leak in metric collection"
-
-# Breaking change (major version bump)
-git commit -m "feat!: change plugin configuration structure
-
-BREAKING CHANGE: The options.metrics property has been renamed to options.customMetrics."
-
-# Documentation (patch version bump)
-git commit -m "docs: update installation instructions"
-
-# No release
-git commit -m "test: add unit tests for new metrics"
-git commit -m "chore: update development dependencies"
-```
-
-**Advanced Version Control:**
-```bash
-# Skip release entirely
-git commit -m "docs: fix typo [skip release]"
-
-# Multiple commits in one release
-git commit -m "feat: add new metric type"
-git commit -m "fix: resolve edge case in collection"
-git commit -m "docs: update API documentation"
-# When merged to main → single release with all changes
-```
-- `chore:` - Maintenance tasks (no release)
-
-**Breaking Changes:**
-```bash
-feat!: redesign plugin API
-
-BREAKING CHANGE: Configuration format has changed.
-See migration guide for details.
-```
-
-### Development Workflow
-
-We use Yarn for all development tasks:
-
-- `yarn test` - Run all tests
-- `yarn test:watch` - Run tests in watch mode
-- `yarn test:coverage` - Run tests with coverage report
-- `yarn lint` - Run ESLint
-- `yarn lint:fix` - Fix ESLint issues automatically
-- `yarn format` - Format code with Prettier
-- `yarn format:check` - Check if code is properly formatted
-- `yarn build` - Build the TypeScript project
-- `yarn build:watch` - Build in watch mode
-- `yarn type-check` - Run TypeScript type checking
-
-## Coding Standards
-
-- Use TypeScript for all new code
-- Follow the existing code style (enforced by ESLint and Prettier)
-- Write meaningful commit messages
-- Add tests for new functionality
-- Update documentation as needed
-
-## Commit Message Format
-
-We follow the [Conventional Commits](https://conventionalcommits.org/) specification:
-
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
-
-Types:
-- `feat`: A new feature
-- `fix`: A bug fix
-- `docs`: Documentation only changes
-- `style`: Changes that do not affect the meaning of the code
-- `refactor`: A code change that neither fixes a bug nor adds a feature
-- `perf`: A code change that improves performance
-- `test`: Adding missing tests or correcting existing tests
-- `chore`: Changes to the build process or auxiliary tools
-
-Examples:
-- `feat: add prometheus metrics collection`
-- `fix: resolve memory leak in metric aggregation`
-- `docs: update API documentation`
-
-## Release Process
-
-1. All changes must be made via pull requests
-2. Pull requests must be approved by a maintainer
-3. All checks must pass before merging
-4. Releases are created by maintainers using semantic versioning
-
-## Questions?
-
-Feel free to open an issue with the question label, or reach out to the maintainers directly.
-
-Thank you for contributing! 🎉
+# Contributing
+
+Thanks for contributing to `@llevintza/fastify-prometheus-metrics`.
+
+## Quick links
+
+- [Branching and Release Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based
+  flow; CI publishes only from `main`
+- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire,
+  Dependabot contract
+- [Development Guide](./docs/DEVELOPMENT.md) — local setup and yarn commands
+- [AGENTS.md](./AGENTS.md) — agent/contributor rules (SSOT for tooling)
+- [Report a bug](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=bug_report.yml)
+- [Request a feature](https://github.com/llevintza/aws-fastify-prometheus/issues/new?template=feature_request.yml)
+
+## How to contribute
+
+1. Fork (or clone) and branch from `main` using a Conventional Commits-style
+   name (for example `feat/your-feature` or `fix/your-bug`). See
+   [Branching Strategy](./docs/BRANCHING_STRATEGY.md).
+2. Follow setup in [Development Guide](./docs/DEVELOPMENT.md).
+3. Use [Conventional Commits](https://www.conventionalcommits.org/) on every
+   commit (enforced by commitlint). Version impact table and examples:
+   [Branching Strategy → Conventional commits](./docs/BRANCHING_STRATEGY.md#conventional-commits--version).
+4. Open a PR into `main`. CI must be green. Do not expect alpha/beta publishes
+   from feature branches — those channels are **not** wired; only `main`
+   publishes (see
+   [outdated channels](./docs/BRANCHING_STRATEGY.md#outdated--unused-channel-claims)).
+5. After review and merge to `main`, semantic-release may publish a stable
+   version. Details: [Release Guide](./docs/RELEASE_GUIDE.md).
+
+## Coding standards
+
+- TypeScript only for new code; match existing ESLint/Prettier style.
+- Add tests for new behaviour; keep coverage at or above `jest.config.js`
+  thresholds.
+- Update `README.md` when options, metrics, or the public API change.
+- Agent-oriented conventions live in [AGENTS.md](./AGENTS.md).
+
+## Questions
+
+Open an issue with the question label, or contact a maintainer.

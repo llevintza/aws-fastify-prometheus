@@ -1,0 +1,23 @@
+name: Setup Node.js and Yarn
+description: Checkout-ready Node + Corepack Yarn install with cache
+inputs:
+  node-version:
+    description: Node.js version
+    required: false
+    default: '26'
+runs:
+  using: composite
+  steps:
+    - name: Enable Corepack
+      shell: bash
+      run: corepack enable
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v7
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: yarn
+
+    - name: Install dependencies
+      shell: bash
+      run: yarn install --immutable

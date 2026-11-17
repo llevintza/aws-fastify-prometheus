@@ -1,213 +1,102 @@
-# GitHub Actions Workflows Summary
+# GitHub Actions workflows
 
-This document provides an overview of all GitHub Actions workflows implemented for comprehensive CI/CD automation and quality assurance.
+Overview of CI/CD for this repo. Deep release/Dependabot rules:
+[docs/RELEASE_GUIDE.md](../docs/RELEASE_GUIDE.md). Branching:
+[docs/BRANCHING_STRATEGY.md](../docs/BRANCHING_STRATEGY.md).
 
-## 📋 Workflow Overview
+## Design principles
 
-### 🚀 Main CI/CD Pipeline (`ci.yml`)
+- **`ci.yml` is the PR quality gate.** Type-check, lint/format/madge, yarn
+  audit, build, Node 22/24/26 tests + coverage, package validation, then release
+  on `main`.
+- **PRs are a billboard**, not a report dump. CI posts a short upserted pointer
+  comment linking to the workflow run Summary and Artifacts.
+- **Detail lives on the Actions run** (`GITHUB_STEP_SUMMARY` + artifacts).
+- **Security SAST/secrets** run in `security.yml` (CodeQL, Semgrep, TruffleHog).
+  Dependency audit on PRs is owned by CI; weekly schedule may attach a deeper
+  audit artifact from `security.yml`.
+- **Dependabot behavior SSOT is the automation** (`dependabot.yml`, stack /
+  auto-merge workflows, stack script, contract analyzer). This hub and
+  [RELEASE_GUIDE.md](../docs/RELEASE_GUIDE.md) stay thin; CI **Dependabot Docs
+  Sync** fails PRs that change automation without touching a hub.
 
-**Triggers:** Pull requests and pushes to `main` branch
-**Purpose:** Comprehensive testing and validation pipeline
+## Workflows
 
-#### Jobs:
-1. **Setup Dependencies** - Caches dependencies for faster builds
-2. **TypeScript Type Check** - Validates TypeScript compilation
-3. **Lint & Format Check** - ESLint and Prettier validation with circular dependency detection
-4. **Security Audit** - Dependency vulnerability scanning
-5. **Build Project** - Compiles TypeScript and validates outputs
-6. **Test Suite** - Runs tests on Node.js 22, 24, and 26 with coverage validation
-7. **Package Validation** - Validates package.json and tests imports
-8. **PR Checks** - Generates comprehensive PR status comments
-9. **Release** - Semantic release on main branch pushes
-10. **CI Success** - Final status aggregation
+| Workflow              | File                        | When                          | Role                                               |
+| --------------------- | --------------------------- | ----------------------------- | -------------------------------------------------- |
+| CI/CD                 | `ci.yml`                    | PR + push to `main`           | Quality gates + semantic-release                   |
+| Security Analysis     | `security.yml`              | PR + push to `main` + weekly  | CodeQL, Semgrep, TruffleHog; weekly audit artifact |
+| Dependabot Stack      | `dependabot-stack.yml`      | Dependabot PR events + manual | Rebase/retarget/link stacked Dependabot PRs        |
+| Dependabot Auto-Merge | `dependabot-auto-merge.yml` | After CI success on a PR      | Auto-merge confident stack-bottom patches          |
 
-#### Key Features:
-- ✅ Parallel job execution for speed
-- ✅ Multi-Node.js version testing (22, 24, 26)
-- ✅ Coverage threshold enforcement (40% branches, 24% functions, 45% lines/statements)
-- ✅ Artifact storage for build outputs and test results
-- ✅ PR status comments with detailed results
-- ✅ Automatic semantic releases
+Retired (function folded elsewhere or replaced by Dependabot):
 
----
+- `code-quality.yml` — duplicated lint/build; bundle size now in CI build
+  Summary
+- `dependency-check.yml` — overlapped Dependabot; no weekly issue spam
 
-### 🔍 Code Quality Analysis (`code-quality.yml`)
+## CI/CD jobs (`ci.yml`)
 
-**Triggers:** Pull requests and pushes to `main` branch
-**Purpose:** Deep code quality analysis and reporting
+| Job                   | Purpose                                                                   |
+| --------------------- | ------------------------------------------------------------------------- |
+| Setup                 | No-op status check required by ruleset; real install is per-job composite |
+| TypeScript Type Check | `yarn type-check`                                                         |
+| Lint & Format Check   | ESLint, Prettier, madge circular check                                    |
+| Security Audit        | Soft `yarn npm audit` + `ci-audit-report` artifact                        |
+| Build                 | `yarn build`, verify `dist/`, bundle size in Summary, `build-artifacts`   |
+| Test (Node 22/24/26)  | `yarn test:coverage` + thresholds; `test-results-node-*`                  |
+| Package Validation    | package.json + import smoke test on downloaded `dist/`                    |
+| Dependabot Docs Sync  | PR-only: fail if Dependabot automation changed without a hub update       |
+| PR Checks             | Upserts short PR comment; full table in Summary (`!cancelled()`)          |
+| Release               | `yarn semantic-release` on `main` push only                               |
+| CI Success            | Aggregates gate results for branch protection                             |
 
-#### Features:
-- 📊 ESLint analysis with JSON reporting
-- 🔄 Code complexity analysis
-- 📦 Bundle size impact assessment
-- 🔍 Duplicate code detection
-- 💬 PR comments with quality metrics
+Shared setup:
+[`.github/actions/setup-node-yarn`](actions/setup-node-yarn/action.yml).
 
----
+## Security Analysis (`security.yml`)
 
-### 🤖 Dependabot Automation (`dependabot-auto-merge.yml`)
+| Check             | Notes                                                             |
+| ----------------- | ----------------------------------------------------------------- |
+| CodeQL            | Uploads to Security → Code scanning                               |
+| Semgrep           | Pinned `semgrep/semgrep:1.110.0`; tool errors fail, findings soft |
+| TruffleHog        | Action + scanner `version: 3.99.9`; verified secrets only         |
+| Weekly yarn audit | Schedule only → `security-reports` artifact                       |
 
-**Triggers:** `workflow_run` after the `CI/CD` workflow completes successfully on a pull request
-**Purpose:** Approve and auto-merge confident stack-bottom Dependabot patches once CI is green
+PR comment: short pointer (`<!-- ci-report:security -->`), not vuln lists.
 
-#### Features:
-- ⏳ **CI Gate** - Runs only when `CI/CD` concluded `success` for a PR
-- 📚 **Stack Gate** - Auto-merge only when the PR base is `main` (upper stacked PRs wait for restack)
-- ✅ **Auto-Approval** - Approves confident patch updates with `GH_TOKEN`
-- 🔄 **Auto-Merge** - Enables GitHub auto-merge (`--merge --auto`) for confident patches only
-- 💬 **Manual Review Comments** - Flags majors / held contract-risk / denylisted groups
-- 🔒 **No `pull_request_target`** - Uses `workflow_run` (default-branch context) instead
+## Required checks (branch protection)
 
-#### Rule:
-- ✅ **CI green + base `main` + confident patch ⇒ auto-merge**
-- ❌ Manual review for majors, `fastify-ecosystem-major`, `aws-ecosystem`, `security-critical`, prom-client majors, `@prometheus-io/client`
-- Auto-merge stays queued until the PR is mergeable; conflicts block merge until resolved
+Mirror the live `main-branch-protection` ruleset contexts (names must match job
+`name:` fields):
 
----
+1. Setup
+2. CI Success
+3. TypeScript Type Check
+4. Lint & Format Check
+5. Security Audit
+6. Build
+7. Test (Node.js 22)
+8. Test (Node.js 24)
+9. Package Validation
+10. PR Checks
+11. Security Vulnerability Scan (from Security Analysis)
 
-### 🔒 Security Analysis (`security.yml`)
+**Not** required by the ruleset today: Test (Node.js 26) (still runs in CI).
+**Setup** stays as a cheap no-op until the ruleset drops that context; real
+Node/Yarn install is `.github/actions/setup-node-yarn` in each job.
 
-**Triggers:** Pull requests, pushes to `main`, weekly schedule (Mondays 9 AM UTC)
-**Purpose:** Comprehensive security vulnerability scanning
+## Coverage thresholds
 
-#### Security Checks:
-- 🛡️ yarn audit for dependency vulnerabilities (via `yarn npm audit` for Yarn v2+)
-- 🔍 CodeQL static analysis
-- 🔐 Semgrep security rule scanning (with fallback if no token)
-- 🕵️ TruffleHog secret detection
-- 📊 Security summary reporting with Yarn v2+ JSON format parsing
+From `jest.config.js`: branches 40 / functions 24 / lines 45 / statements 45.
 
----
+## Secrets
 
-### 📦 Dependency Update Check (`dependency-check.yml`)
+| Secret                                 | Used for                                     |
+| -------------------------------------- | -------------------------------------------- |
+| `XOON_NPM_PUBLISH_TOKEN`               | semantic-release / GitHub Packages publish   |
+| `CODE_QUALITY_REPORT_TOKEN`            | Upsert short CI/Security PR pointer comments |
+| `GH_TOKEN` (or publish token fallback) | Dependabot stack push/retarget               |
 
-**Triggers:** Weekly schedule (Mondays 8 AM UTC), manual dispatch
-**Purpose:** Automated dependency update monitoring
-
-#### Features:
-- 📋 Yarn outdated dependency detection
-- 🔄 npm-check-updates analysis
-- 📝 Automated issue creation for updates
-- 📊 Comprehensive update reports
-
----
-
-## 🎯 Quality Gates and Enforcement
-
-### Required Status Checks for PR Merging:
-1. ✅ CI Success (overall pipeline status)
-2. ✅ TypeScript Type Check
-3. ✅ Lint & Format Check
-4. ✅ Security Audit
-5. ✅ Build Project
-6. ✅ Test Suite (Node.js 22)
-7. ✅ Test Suite (Node.js 24)
-8. ✅ Test Suite (Node.js 26)
-9. ✅ Package Validation
-
-### Coverage Requirements:
-- **Lines:** 45% minimum
-- **Functions:** 24% minimum
-- **Branches:** 40% minimum
-- **Statements:** 45% minimum
-
-### Security Requirements:
-- ✅ No high/critical dependency vulnerabilities
-- ✅ No secrets detected in code
-- ✅ CodeQL security checks passed
-- ✅ Semgrep security rules validated
-
----
-
-## 🔧 Configuration Files
-
-### `.github/CODEOWNERS`
-- Defines code review requirements
-- Ensures appropriate reviewers are assigned
-- Covers all file types and critical paths
-
-### `.github/pull_request_template.md`
-- Comprehensive PR checklist
-- Quality gates verification
-- Security and testing requirements
-
-### `.github/dependabot.yml`
-- Automated dependency updates
-- Weekly schedule for npm and GitHub Actions
-- Grouped updates by dependency type
-- Security-focused update strategy
-
-### `.github/REPOSITORY_SETUP_GUIDE.md`
-- Step-by-step GitHub repository configuration
-- Branch protection rules setup
-- Required status checks configuration
-- Security settings and best practices
-
----
-
-## 🚦 Workflow Status Indicators
-
-### Success Criteria:
-- ✅ All jobs in CI pipeline pass
-- ✅ Test coverage meets thresholds
-- ✅ No security vulnerabilities found
-- ✅ Code quality standards met
-- ✅ All required reviews approved
-
-### Failure Scenarios:
-- ❌ Test failures or coverage below thresholds
-- ❌ Linting errors or formatting issues
-- ❌ TypeScript compilation errors
-- ❌ Build failures
-- ❌ Security vulnerabilities detected
-- ❌ Missing required approvals
-
----
-
-## 📊 Reporting and Notifications
-
-### PR Comments Include:
-- 📋 Job status overview
-- 📊 Test coverage metrics
-- 🔍 Code quality analysis
-- 🔒 Security scan results
-- 📦 Bundle size impact
-
-### Automated Issues:
-- 📦 Weekly dependency update reports
-- 🔒 Security vulnerability alerts
-- 🐛 Failed workflow notifications
-
----
-
-## 🛠️ Maintenance and Updates
-
-### Regular Maintenance:
-- 🔄 Weekly dependency scans
-- 🔒 Security vulnerability monitoring
-- 📊 Performance metric tracking
-- 🧹 Artifact cleanup (7-30 day retention)
-
-### Workflow Updates:
-- 🆕 New tools and integrations
-- 📈 Performance improvements
-- 🔧 Configuration refinements
-- 🔒 Security enhancements
-
----
-
-## 🏗️ Industry Standards Compliance
-
-This CI/CD setup follows industry best practices:
-
-- ✅ **Continuous Integration** - Automated testing on every change
-- ✅ **Continuous Deployment** - Automated releases with semantic versioning
-- ✅ **Quality Gates** - Multiple validation layers before merge
-- ✅ **Security First** - Comprehensive security scanning
-- ✅ **Branch Protection** - No direct commits to main branch
-- ✅ **Code Reviews** - Mandatory peer review process
-- ✅ **Documentation** - Comprehensive guides and templates
-- ✅ **Monitoring** - Automated dependency and security monitoring
-- ✅ **Compliance** - Audit trails and approval processes
-
-This setup ensures that every change to the main branch is thoroughly tested, reviewed, and validated against security and quality standards.
+Prefer classic PATs with least privilege. Do not use fine-grained PATs for
+Packages publish.

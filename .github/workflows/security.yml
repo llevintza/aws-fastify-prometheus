@@ -6,55 +6,25 @@ on:
   push:
     branches: [main]
   schedule:
-    # Run security scan weekly on Mondays at 9 AM UTC
+    # Weekly deeper dependency audit (CI already audits on every PR).
     - cron: '0 9 * * 1'
+
+permissions:
+  contents: read
+  actions: read
+  security-events: write
 
 jobs:
   security-scan:
     name: Security Vulnerability Scan
     runs-on: ubuntu-latest
-    permissions:
-      security-events: write
-      actions: read
-      contents: read
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          # TruffleHog needs the full history to diff the pushed/PR commit range.
+          # TruffleHog needs history to diff the commit range.
           fetch-depth: 0
-
-      - name: Enable Corepack
-        run: corepack enable
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v7
-        with:
-          node-version: '26'
-          cache: 'yarn'
-
-      - name: Install dependencies
-        run: yarn install --immutable
-
-      - name: Run npm audit
-        run: |
-          echo "Running npm security audit..."
-          yarn audit --json > audit-report.json || echo "Audit completed with findings"
-          yarn audit || echo "Audit found issues (this is normal)"
-
-      - name: Run additional audit checks
-        run: |
-          echo "Running additional security checks..."
-          # Check for yarn audit (if Yarn v1)
-          yarn_version=$(yarn --version)
-          echo "Yarn version: $yarn_version"
-          
-          if [[ "$yarn_version" =~ ^1\. ]]; then
-            echo "Running Yarn v1 native audit..."
-            yarn audit --level moderate --json > yarn-audit-report.json || true
-          else
-            echo "Yarn v2+ detected. npm audit already covers vulnerability scanning."
-          fi
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v4
@@ -64,152 +34,118 @@ jobs:
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v4
 
-      - name: Run Semgrep security scan
-        uses: returntocorp/semgrep-action@v1
-        continue-on-error: true
-        with:
-          config: >-
-            p/security-audit
-            p/secrets
-            p/javascript
-            p/typescript
-            p/nodejs
+      - name: Run Semgrep
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.110.0 \
+            semgrep scan \
+            --config=p/security-audit \
+            --config=p/secrets \
+            --config=p/javascript \
+            --config=p/typescript \
+            --config=p/nodejs \
+            .
+          status=$?
+          set -e
+          # Semgrep: 0 clean, 1 findings, >=2 tool/config failure.
+          if [[ "$status" -gt 1 ]]; then
+            echo "::error::Semgrep tool error (exit $status)"
+            exit "$status"
+          fi
+          echo "Semgrep finished (exit $status; 1 means findings only, job stays green)"
+          exit 0
 
       - name: Check for secrets in code
-        uses: trufflesecurity/trufflehog@main
+        uses: trufflesecurity/trufflehog@v3.99.9
         with:
-          # No base/head: the action derives the range from the event
-          # (push: before..after, PR: base..head, schedule: full history).
-          # Hard-coding base: main made BASE == HEAD on pushes to main.
           path: ./
-          extra_args: --debug --only-verified
+          version: 3.99.9
+          extra_args: --only-verified
 
-      - name: Analyze security report
+      - name: Setup Node/Yarn for weekly audit
+        if: always() && github.event_name == 'schedule'
+        uses: ./.github/actions/setup-node-yarn
+
+      - name: Weekly dependency audit artifact
+        if: always() && github.event_name == 'schedule'
+        env:
+          YARN_ENABLE_COLORS: '0'
         run: |
-          echo "Analyzing security reports..."
-          
-          # Check yarn audit results
-          if [ -f "audit-report.json" ]; then
-            echo "Checking yarn audit results..."
-            vulnerabilities=$(wc -l < audit-report.json 2>/dev/null || echo "0")
-            echo "Found $vulnerabilities vulnerability entries in yarn audit"
-            
-            if [ "$vulnerabilities" -gt "0" ]; then
-              echo "⚠️ Security vulnerabilities found. Details:"
-              echo "================================================"
-              
-              # Parse each vulnerability properly
-              while IFS= read -r line; do
-                if [ -n "$line" ]; then
-                  echo "🔍 Analyzing vulnerability..."
-                  package=$(echo "$line" | jq -r '.value // "Unknown"' 2>/dev/null)
-                  issue=$(echo "$line" | jq -r '.children.Issue // "Unknown issue"' 2>/dev/null)
-                  severity=$(echo "$line" | jq -r '.children.Severity // "Unknown"' 2>/dev/null)
-                  version=$(echo "$line" | jq -r '.children["Vulnerable Versions"] // "Unknown"' 2>/dev/null)
-                  dependents=$(echo "$line" | jq -r '.children.Dependents[]? // "Unknown"' 2>/dev/null)
-                  
-                  echo "📦 Package: $package"
-                  echo "🚨 Severity: $severity"
-                  echo "📄 Issue: $issue"
-                  echo "🔢 Vulnerable Version: $version"
-                  echo "📋 Used by: $dependents"
-                  echo "------------------------------------------------"
-                fi
-              done < audit-report.json
-              
-              echo ""
-              echo "💡 RECOMMENDATIONS:"
-              echo "1. Check if these are direct dependencies in package.json"
-              echo "2. Update packages with: yarn upgrade"
-              echo "3. For transitive deps, update the parent packages"
-              echo "4. Consider using 'yarn why <package>' to trace dependency paths"
-            else
-              echo "✅ No vulnerabilities found in yarn audit"
-            fi
-          else
-            echo "No audit report found"
-          fi
+          set +e
+          yarn npm audit -A -R > audit-report.txt 2>&1
+          set -e
+          {
+            echo "## Weekly dependency audit"
+            echo ""
+            echo '```'
+            head -n 120 audit-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Generate security summary
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v9
-        with:
-          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
-          script: |
-            const fs = require('fs');
-            let summary = '## 🔒 Security Analysis Summary\n\n';
-            
-            // yarn audit results (Yarn v2+ format)
-            if (fs.existsSync('audit-report.json')) {
-              try {
-                const auditContent = fs.readFileSync('audit-report.json', 'utf8');
-                const auditLines = auditContent.trim().split('\n').filter(line => line.trim());
-                const vulnCount = auditLines.length;
-                
-                summary += '### 🛡️ Dependency Vulnerabilities\n';
-                summary += `- **yarn audit**: ${vulnCount} vulnerability entries found\n\n`;
-                
-                if (vulnCount > 0) {
-                  summary += '⚠️ **Vulnerabilities detected - please review:**\n\n';
-                  
-                  // Parse and display vulnerabilities properly
-                  auditLines.slice(0, 5).forEach((line, index) => {
-                    try {
-                      const vuln = JSON.parse(line);
-                      const pkg = vuln.value || 'Unknown package';
-                      const issue = vuln.children?.Issue || 'Unknown issue';
-                      const severity = vuln.children?.Severity || 'Unknown';
-                      const version = vuln.children?.['Vulnerable Versions'] || 'Unknown';
-                      const dependents = vuln.children?.Dependents?.join(', ') || 'Unknown';
-                      
-                      summary += `#### ${index + 1}. 📦 \`${pkg}\` (${severity})\n`;
-                      summary += `- **Issue**: ${issue}\n`;
-                      summary += `- **Vulnerable Version**: \`${version}\`\n`;
-                      summary += `- **Used by**: ${dependents}\n\n`;
-                    } catch (e) {
-                      summary += `#### ${index + 1}. Raw entry\n\`\`\`\n${line.substring(0, 200)}...\n\`\`\`\n\n`;
-                    }
-                  });
-                  
-                  if (vulnCount > 5) {
-                    summary += `*... and ${vulnCount - 5} more vulnerabilities*\n\n`;
-                  }
-                  
-                  summary += '### 💡 Recommended Actions:\n';
-                  summary += '1. Run `yarn upgrade` to update packages\n';
-                  summary += '2. Use `yarn why <package>` to trace dependency paths\n';
-                  summary += '3. Consider updating parent packages for transitive dependencies\n';
-                  summary += '4. Check if any direct dependencies can be updated in package.json\n\n';
-                } else {
-                  summary += '✅ **No vulnerabilities found**\n';
-                }
-              } catch (e) {
-                summary += '### 🛡️ Dependency Vulnerabilities\n❌ Could not parse audit report\n';
-              }
-            } else {
-              summary += '### 🛡️ Dependency Vulnerabilities\n❌ No audit report found\n';
-            }
-            
-            summary += '\n### 🔍 Additional Security Checks\n';
-            summary += '- ✅ CodeQL static analysis completed\n';
-            summary += '- ✅ Semgrep security rules applied\n';
-            summary += '- ✅ Secret scanning performed\n\n';
-            
-            summary += '---\n*Generated by Security Analysis workflow*';
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: summary
-            });
-
-      - name: Upload security reports
+      - name: Upload weekly audit report
+        if: always() && github.event_name == 'schedule'
         uses: actions/upload-artifact@v7
-        if: always()
         with:
           name: security-reports
-          path: |
-            audit-report.json
-            yarn-audit-report.json
+          path: audit-report.txt
           retention-days: 30
+          if-no-files-found: ignore
+
+      - name: Write summary and upsert PR pointer
+        if: ${{ !cancelled() && github.event_name == 'pull_request' }}
+        uses: actions/github-script@v9
+        env:
+          REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
+        with:
+          # Placeholder when secret absent (forks); script returns before Octokit use.
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || 'unused' }}
+          script: |
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const summary = [
+              '## Security Analysis',
+              '',
+              '- CodeQL: see the repository **Security → Code scanning** tab',
+              '- Semgrep: pinned `semgrep/semgrep:1.110.0`; tool errors fail, findings do not',
+              '- TruffleHog: verified secrets only (job fails on findings)',
+              '- Dependency audit on PRs: owned by **CI/CD → Security Audit**',
+              '',
+              `[Open workflow run](${runUrl})`,
+            ].join('\n');
+            await core.summary.addRaw(summary, true).write();
+
+            if (!process.env.REPORT_TOKEN) {
+              core.warning('CODE_QUALITY_REPORT_TOKEN unavailable; skipping PR comment upsert');
+              return;
+            }
+
+            const marker = '<!-- ci-report:security -->';
+            const body = [
+              marker,
+              '### Security Analysis',
+              `- Details: [workflow run](${runUrl}) (Summary + logs)`,
+              '- Code scanning alerts: repository **Security** tab (CodeQL)',
+              '- Dependency audit: see **CI/CD** check / `ci-audit-report` artifact',
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((c) => c.body && c.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
