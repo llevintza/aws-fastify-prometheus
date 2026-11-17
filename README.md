@@ -313,9 +313,16 @@ http_requests_total{method="GET",route="/users",status_code="200"} 1 # {trace_id
 ```
 
 `@opentelemetry/api` is an **optional** peer dependency. Install it (and set up the OpenTelemetry
-SDK) to get exemplars. If it isn't installed, or no span is active when the response is
-recorded, metrics are recorded without an exemplar. To supply exemplar labels yourself, pass a
-function instead of `true`. Return `undefined` to skip the exemplar for that request:
+SDK) to get exemplars. If it isn't installed, if no span is active, or if the span is not sampled,
+metrics are recorded without an exemplar.
+
+The exemplar is captured in the `onRequest` hook, while the request's span is still active
+(tracing instrumentations often end the span before `onResponse`). If nothing is captured
+there, the extractor runs once more in `onResponse`, so labels set by a route handler are also
+picked up.
+
+To supply exemplar labels yourself, pass a function instead of `true`. Return `undefined` to skip
+the exemplar for that request:
 
 ```typescript
 await fastify.register(fastifyPrometheusPlugin, {
@@ -323,10 +330,22 @@ await fastify.register(fastifyPrometheusPlugin, {
   openMetrics: true,
   exemplars: request => {
     const traceId = request.headers['x-trace-id'];
-    return typeof traceId === 'string' ? { trace_id: traceId } : undefined;
+    // Request headers are untrusted input: only accept a well-formed trace id
+    return typeof traceId === 'string' && /^[0-9a-f]{32}$/.test(traceId)
+      ? { trace_id: traceId }
+      : undefined;
   },
 });
 ```
+
+Exemplar labels must be a valid OpenMetrics label set: label names match
+`[a-zA-Z_][a-zA-Z0-9_]*`, values are strings, and the names and values together are at most 128
+characters. An invalid label set, or an extractor that throws, is dropped and the observation is
+recorded without an exemplar, so one bad request can't break the `/metrics` output.
+
+Only the plugin's own request hooks attach exemplars. The `fastify.prometheus` helpers
+(`incrementCounter`, `observeHistogram`, `recordHttpRequest`) keep working on the
+exemplar-enabled metrics but record without an exemplar.
 
 The built-in extractor is exported as `otelExemplarExtractor` if you want to wrap it.
 

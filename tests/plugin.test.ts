@@ -316,6 +316,96 @@ describe('Fastify Prometheus Plugin', () => {
       await fastify.close();
     });
 
+    test('should use the span that was active when the request started', async () => {
+      // Tracing instrumentations may end or detach the span before onResponse runs
+      jest
+        .spyOn(trace, 'getActiveSpan')
+        .mockReturnValueOnce(
+          trace.wrapSpanContext({ traceId: TRACE_ID, spanId: SPAN_ID, traceFlags: 1 })
+        )
+        .mockReturnValue(undefined);
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        openMetrics: true,
+        exemplars: true,
+      });
+      fastify.get('/test', () => ({ ok: true }));
+
+      await fastify.inject({ method: 'GET', url: '/test' });
+      const body = (await fastify.inject({ method: 'GET', url: '/metrics' })).body;
+
+      const exemplar = `# {trace_id="${TRACE_ID}",span_id="${SPAN_ID}"}`;
+      expect(body).toMatch(
+        new RegExp(`http_requests_total\\{[^}]*route="/test"[^}]*\\} 1 ${escapeRegExp(exemplar)}`)
+      );
+
+      await fastify.close();
+    });
+
+    test('should extract again in onResponse when nothing was captured in onRequest', async () => {
+      let handled = false;
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        openMetrics: true,
+        exemplars: () => (handled ? { trace_id: TRACE_ID } : undefined),
+      });
+      fastify.get('/test', () => {
+        handled = true;
+        return { ok: true };
+      });
+
+      await fastify.inject({ method: 'GET', url: '/test' });
+      const body = (await fastify.inject({ method: 'GET', url: '/metrics' })).body;
+
+      expect(body).toContain(`# {trace_id="${TRACE_ID}"}`);
+
+      await fastify.close();
+    });
+
+    test('should drop invalid or failing exemplars without breaking metrics', async () => {
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        openMetrics: true,
+        exemplars: request => {
+          const traceId = request.headers['x-trace-id'];
+          if (traceId === 'throw') {
+            throw new Error('extractor failure');
+          }
+          return typeof traceId === 'string' ? { trace_id: traceId } : undefined;
+        },
+      });
+      fastify.get('/test', () => ({ ok: true }));
+
+      const oversized = await fastify.inject({
+        method: 'GET',
+        url: '/test',
+        headers: { 'x-trace-id': 'a'.repeat(200) },
+      });
+      const failing = await fastify.inject({
+        method: 'GET',
+        url: '/test',
+        headers: { 'x-trace-id': 'throw' },
+      });
+      await fastify.inject({ method: 'GET', url: '/test', headers: { 'x-trace-id': TRACE_ID } });
+      const body = (await fastify.inject({ method: 'GET', url: '/metrics' })).body;
+
+      expect(oversized.statusCode).toBe(200);
+      expect(failing.statusCode).toBe(200);
+      expect(body).not.toContain('undefined');
+      expect(body).not.toContain('# {}');
+      expect(body).not.toContain('a'.repeat(200));
+      expect(body).toMatch(/http_requests_total\{[^}]*route="\/test"[^}]*\} 3 # \{trace_id=/);
+      expect(body).toMatch(/http_request_duration_ms_count\{[^}]*route="\/test"[^}]*\} 3\n/);
+
+      await fastify.close();
+    });
+
     test('should record metrics without exemplars when no span is active', async () => {
       const fastify = Fastify();
       await fastify.register(fastifyPrometheusPlugin, {

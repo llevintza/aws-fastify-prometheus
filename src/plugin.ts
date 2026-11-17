@@ -16,7 +16,7 @@ import {
 import type { RegistryContentType } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
-import { resolveExemplarExtractor } from './exemplars';
+import { resolveExemplarExtractor, safeExtractExemplar } from './exemplars';
 import type {
   FastifyPrometheusOptions,
   HttpRequestMetrics,
@@ -102,6 +102,8 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   const metrics = new Map<string, Counter | Gauge | Histogram | Summary>();
   // Names of metrics created with `enableExemplars` (they only accept the object call form)
   const exemplarMetrics = new Set<string>();
+  // Exemplars captured in onRequest, while the request's trace span is still active
+  const requestExemplars = new WeakMap<FastifyRequest, ExemplarLabels>();
   let awsExporter: AwsMetricsExporter | undefined;
 
   // Initialize AWS CloudWatch exporter if configured
@@ -151,6 +153,13 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   // Add request tracking hooks
   void fastify.addHook('onRequest', async (request: FastifyRequest) => {
     request.startTime = Date.now();
+
+    if (exemplarExtractor !== undefined) {
+      const exemplarLabels = safeExtractExemplar(exemplarExtractor, request);
+      if (exemplarLabels !== undefined) {
+        requestExemplars.set(request, exemplarLabels);
+      }
+    }
 
     return Promise.resolve();
   });
@@ -205,7 +214,13 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     }
 
     if (config.httpMetrics) {
-      const exemplarLabels = exemplarExtractor?.(request);
+      // Prefer the onRequest snapshot: tracing instrumentations may end or detach the span before
+      // onResponse runs. Fall back to extracting now (e.g. labels set by the route handler).
+      const exemplarLabels =
+        requestExemplars.get(request) ??
+        (exemplarExtractor !== undefined
+          ? safeExtractExemplar(exemplarExtractor, request)
+          : undefined);
       recordHttpMetrics(
         metricsData,
         config.httpMetrics,
