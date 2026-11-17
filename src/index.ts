@@ -10,6 +10,7 @@ export { AwsMetricsExporter } from './aws-metrics-exporter';
 export { PrometheusMetrics } from './prometheus-metrics';
 export { MetricsCollector } from './metrics-collector';
 export { otelExemplarExtractor } from './exemplars';
+export { shouldRecord, matchesRoute } from './route-filter';
 
 // Export all types
 export type {
@@ -20,6 +21,7 @@ export type {
   ResponseSizeConfig,
   ErrorCountConfig,
   SuccessCountConfig,
+  InFlightConfig,
   CustomMetricDefinition,
   CustomMetricConfig,
   AwsExporterConfig,
@@ -29,6 +31,9 @@ export type {
   FastifyPrometheusContext,
   ExemplarLabels,
   ExemplarExtractor,
+  RouteMatcher,
+  RouteMatchMode,
+  RouteFilterConfig,
 } from './types';
 
 // Re-export the plugin as default for easy import

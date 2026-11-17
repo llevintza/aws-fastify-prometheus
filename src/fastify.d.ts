@@ -14,9 +14,16 @@ declare module 'fastify' {
 
   interface FastifyRequest {
     /**
-     * Request start time for duration calculation
+     * Request start time (`process.hrtime.bigint()`) for duration calculation
      * @internal
      */
-    startTime?: number;
+    startTime?: bigint;
+  }
+
+  interface FastifyContextConfig {
+    /**
+     * Set to `false` to skip HTTP metrics for this route
+     */
+    metrics?: boolean;
   }
 }

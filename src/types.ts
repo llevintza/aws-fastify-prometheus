@@ -84,10 +84,22 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
   awsCloudWatch?: AwsExporterConfig;
 
   /** Exclude specific routes from metrics collection */
-  excludeRoutes?: string[];
+  excludeRoutes?: RouteMatcher[];
 
   /** Include only specific routes in metrics collection */
-  includeRoutes?: string[];
+  includeRoutes?: RouteMatcher[];
+
+  /**
+   * How string entries in `excludeRoutes` / `includeRoutes` are matched.
+   * Defaults to `'substring'`.
+   */
+  routeMatch?: RouteMatchMode;
+
+  /**
+   * Label used for the `route` label when a request matched no registered route
+   * (for example a 404). When unset, the raw request URL is used.
+   */
+  unmatchedRouteLabel?: string;
 
   /** Custom labels to add to all metrics */
   defaultLabels?: Record<string, string>;
@@ -105,6 +117,37 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
    * Requires `openMetrics: true`.
    */
   exemplars?: boolean | ExemplarExtractor;
+
+  /**
+   * Prefix prepended verbatim to the HTTP and custom metric names registered by the plugin
+   * (for example `'myapp_'`). Context methods such as `incrementCounter` still take the
+   * unprefixed name. Default: no prefix.
+   */
+  prefix?: string;
+}
+
+/**
+ * A route filter entry: a string (matched per `routeMatch`), a RegExp, or a predicate
+ */
+export type RouteMatcher = string | RegExp | ((route: string) => boolean);
+
+/**
+ * How string route matchers are compared with the route label
+ */
+export type RouteMatchMode = 'substring' | 'exact';
+
+/**
+ * Route filter settings consumed by `shouldRecord`
+ */
+export interface RouteFilterConfig {
+  /** Routes to skip */
+  excludeRoutes?: RouteMatcher[];
+
+  /** When non-empty, only matching routes are recorded */
+  includeRoutes?: RouteMatcher[];
+
+  /** String matching mode (default `'substring'`) */
+  routeMatch?: RouteMatchMode;
 }
 
 /**
@@ -135,6 +178,23 @@ export interface HttpMetricsConfig {
 
   /** Enable success count counter */
   successCount?: SuccessCountConfig;
+
+  /** Enable the in-flight requests gauge (off by default) */
+  inFlight?: InFlightConfig;
+}
+
+/**
+ * In-flight requests gauge configuration. The gauge has a single `method` label.
+ */
+export interface InFlightConfig {
+  /** Enable this metric (default: false) */
+  enabled?: boolean;
+
+  /** Metric name (default: `http_requests_in_flight`) */
+  name?: string;
+
+  /** Metric help text */
+  help?: string;
 }
 
 /**

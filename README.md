@@ -1,6 +1,7 @@
 # Fastify Prometheus Metrics Plugin
 
-A comprehensive Fastify plugin for collecting and exporting Prometheus metrics with optional AWS CloudWatch integration.
+A comprehensive Fastify plugin for collecting and exporting Prometheus metrics
+with optional AWS CloudWatch integration.
 
 [![GitHub Package Registry](https://img.shields.io/github/package-json/v/llevintza/aws-fastify-prometheus?color=blue&label=version&logo=github)](https://github.com/llevintza/aws-fastify-prometheus/packages)
 [![GitHub release](https://img.shields.io/github/v/release/llevintza/aws-fastify-prometheus?logo=github)](https://github.com/llevintza/aws-fastify-prometheus/releases)
@@ -10,13 +11,19 @@ A comprehensive Fastify plugin for collecting and exporting Prometheus metrics w
 
 ## Features
 
-- 📊 **Automatic HTTP Metrics Collection**: Request duration, count, response size, error/success rates
-- 🎯 **Customizable Metrics**: Define your own business logic metrics (counters, gauges, histograms, summaries)
+- 📊 **Automatic HTTP Metrics Collection**: Request duration, count, response
+  size, error/success rates
+- 🎯 **Customizable Metrics**: Define your own business logic metrics (counters,
+  gauges, histograms, summaries)
 - ⚡ **High Performance**: Minimal overhead with efficient metric collection
-- 🔧 **Highly Configurable**: Customize histogram buckets, labels, and collection behavior
-- ☁️ **AWS CloudWatch Integration**: Export metrics to CloudWatch for centralized monitoring
-- 🛡️ **TypeScript First**: Full TypeScript support with comprehensive type definitions
-- 🔍 **Route Filtering**: Include/exclude specific routes from metrics collection
+- 🔧 **Highly Configurable**: Customize histogram buckets, labels, and
+  collection behavior
+- ☁️ **AWS CloudWatch Integration**: Export metrics to CloudWatch for
+  centralized monitoring
+- 🛡️ **TypeScript First**: Full TypeScript support with comprehensive type
+  definitions
+- 🔍 **Route Filtering**: Include/exclude specific routes from metrics
+  collection
 - 📈 **Prometheus Compatible**: Standard Prometheus metrics format
 
 ## Installation
@@ -32,7 +39,8 @@ pnpm add @llevintza/fastify-prometheus-metrics
 
 ### GitHub Packages Configuration
 
-This package is published to GitHub Packages. Configure npm for the `@llevintza` scope:
+This package is published to GitHub Packages. Configure npm for the `@llevintza`
+scope:
 
 ```bash
 # Configure registry for the @llevintza scope
@@ -44,9 +52,13 @@ echo "//npm.pkg.github.com/:_authToken=YOUR_GITHUB_TOKEN" >> ~/.npmrc
 
 ### Releases
 
-Stable versions publish automatically when changes land on `main` (CI `Release` job → `yarn semantic-release` → GitHub Packages). `.releaserc.js` still lists `feature/*` (alpha) and `release/*` (beta), but **CI does not publish those channels today**.
+Stable versions publish automatically when changes land on `main` (CI `Release`
+job → `yarn semantic-release` → GitHub Packages). `.releaserc.js` still lists
+`feature/*` (alpha) and `release/*` (beta), but **CI does not publish those
+channels today**.
 
-> **📖 Documentation**: See the [Release Guide](./docs/RELEASE_GUIDE.md) and [Branching Strategy](./docs/BRANCHING_STRATEGY.md).
+> **📖 Documentation**: See the [Release Guide](./docs/RELEASE_GUIDE.md) and
+> [Branching Strategy](./docs/BRANCHING_STRATEGY.md).
 
 ## Quick Start
 
@@ -83,25 +95,25 @@ const fastify = Fastify();
 await fastify.register(fastifyPrometheusPlugin, {
   // Metrics endpoint (default: '/metrics')
   endpoint: '/metrics',
-  
+
   // Enable Node.js default metrics (default: true)
   enableDefaultMetrics: true,
-  
+
   // Default metrics collection interval (default: 10000ms)
   defaultMetricsInterval: 5000,
-  
+
   // Exclude routes from metrics collection
   excludeRoutes: ['/health', '/metrics'],
-  
+
   // Only include specific routes (optional)
   includeRoutes: ['/api/*'],
-  
+
   // Add default labels to all metrics
   defaultLabels: {
     service: 'my-api',
     version: '1.0.0',
   },
-  
+
   // Configure HTTP metrics
   httpMetrics: {
     requestDuration: {
@@ -124,7 +136,7 @@ await fastify.register(fastifyPrometheusPlugin, {
     errorCount: { enabled: true },
     successCount: { enabled: true },
   },
-  
+
   // Define custom metrics
   customMetrics: [
     {
@@ -148,7 +160,7 @@ await fastify.register(fastifyPrometheusPlugin, {
       help: 'Number of active database connections',
     },
   ],
-  
+
   // AWS CloudWatch integration (optional)
   awsCloudWatch: {
     region: 'us-east-1',
@@ -161,30 +173,35 @@ await fastify.register(fastifyPrometheusPlugin, {
 
 ## Using Custom Metrics
 
-Once the plugin is registered, you can access custom metrics through the `fastify.prometheus` object:
+Once the plugin is registered, you can access custom metrics through the
+`fastify.prometheus` object:
 
 ```typescript
 // In your route handlers
 fastify.get('/api/users', async (request, reply) => {
   const startTime = Date.now();
-  
+
   try {
     // Your business logic
     const users = await getUsersFromDatabase();
-    
+
     // Increment success counter
     fastify.prometheus.incrementCounter('business_operations_total', {
       operation_type: 'get_users',
       user_id: request.user?.id || 'anonymous',
     });
-    
+
     // Record database query time
     const queryTime = Date.now() - startTime;
-    fastify.prometheus.observeHistogram('database_query_duration_ms', queryTime, {
-      query_type: 'select',
-      table: 'users',
-    });
-    
+    fastify.prometheus.observeHistogram(
+      'database_query_duration_ms',
+      queryTime,
+      {
+        query_type: 'select',
+        table: 'users',
+      }
+    );
+
     return users;
   } catch (error) {
     // Handle errors...
@@ -203,7 +220,8 @@ fastify.addHook('onReady', async () => {
 
 ## Plugin API
 
-The plugin adds a `prometheus` object to your Fastify instance with the following methods:
+The plugin adds a `prometheus` object to your Fastify instance with the
+following methods:
 
 ### `getMetrics(): Promise<string>`
 
@@ -243,7 +261,9 @@ fastify.prometheus.setGauge('active_users', 42, { server: 'api-1' });
 Records a histogram observation.
 
 ```typescript
-fastify.prometheus.observeHistogram('request_size', 1024, { endpoint: '/api/data' });
+fastify.prometheus.observeHistogram('request_size', 1024, {
+  endpoint: '/api/data',
+});
 ```
 
 ### `observeSummary(name: string, value: number, labels?: MetricLabels): void`
@@ -258,26 +278,53 @@ fastify.prometheus.observeSummary('processing_time', 150.5, { type: 'batch' });
 
 The plugin automatically collects the following HTTP metrics:
 
-| Metric Name | Type | Description | Labels |
-|-------------|------|-------------|---------|
-| `http_request_duration_ms` | Histogram | Request duration in milliseconds | `method`, `route`, `status_code` |
-| `http_requests_total` | Counter | Total number of HTTP requests | `method`, `route`, `status_code` |
-| `http_response_size_bytes` | Histogram | Response size in bytes | `method`, `route`, `status_code` |
-| `http_errors_total` | Counter | Total number of HTTP errors (4xx, 5xx) | `method`, `route`, `status_code` |
-| `http_success_total` | Counter | Total number of successful requests (2xx, 3xx) | `method`, `route`, `status_code` |
+| Metric Name                | Type      | Description                                                | Labels                           |
+| -------------------------- | --------- | ---------------------------------------------------------- | -------------------------------- |
+| `http_request_duration_ms` | Histogram | Request duration in milliseconds                           | `method`, `route`, `status_code` |
+| `http_requests_total`      | Counter   | Total number of HTTP requests                              | `method`, `route`, `status_code` |
+| `http_response_size_bytes` | Histogram | Response size in bytes                                     | `method`, `route`, `status_code` |
+| `http_errors_total`        | Counter   | Total number of HTTP errors (4xx, 5xx)                     | `method`, `route`, `status_code` |
+| `http_success_total`       | Counter   | Total number of successful requests (2xx, 3xx)             | `method`, `route`, `status_code` |
+| `http_requests_in_flight`  | Gauge     | Requests currently being processed (**opt-in**, see below) | `method`                         |
+
+Request durations are measured with `process.hrtime.bigint()` and recorded as
+fractional milliseconds, so sub-millisecond buckets such as `0.1` are
+meaningful.
+
+The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`. It
+goes up in `onRequest` and down exactly once, in `onResponse` or in
+`onRequestAbort` when the client disconnects. It uses the same filtering as the
+other HTTP metrics (`excludeRoutes` / `includeRoutes`, `routeMatch` and the
+per-route `metrics: false` opt-out), and its only label is `method`.
+
+- **Scrapes count themselves.** `/metrics` isn't in the default `excludeRoutes`,
+  so each scrape sees at least 1 for `GET`. Add your metrics endpoint to
+  `excludeRoutes` to leave it out.
+- **Older Fastify 4.x.** Fastify versions without the `onRequestAbort` hook
+  (older 4.x minors) log a warning at startup and decrement in `onResponse`
+  only. There, a client abort that never reaches `onResponse` leaves the gauge
+  incremented, so it can drift upward over the life of the process. Use a
+  Fastify version that has `onRequestAbort` for an accurate gauge.
+
+`inFlight` takes `enabled`, plus optional `name` (default
+`http_requests_in_flight`) and `help`. Because a partial `httpMetrics` replaces
+the defaults, see [Configuration Options](#configuration-options) for how to
+enable it and keep the default HTTP metrics.
 
 ## AWS CloudWatch Integration
 
-When AWS CloudWatch integration is enabled, metrics are automatically exported to CloudWatch in addition to being available at the Prometheus endpoint.
+When AWS CloudWatch integration is enabled, metrics are automatically exported
+to CloudWatch in addition to being available at the Prometheus endpoint.
 
 ```typescript
 await fastify.register(fastifyPrometheusPlugin, {
   awsCloudWatch: {
     region: 'us-east-1',
     namespace: 'MyApp/Production',
-    batchSize: 20,          // Metrics per batch
-    flushInterval: 60000,   // Flush every minute
-    credentials: {          // Optional: custom credentials
+    batchSize: 20, // Metrics per batch
+    flushInterval: 60000, // Flush every minute
+    credentials: {
+      // Optional: custom credentials
       accessKeyId: 'your-access-key',
       secretAccessKey: 'your-secret-key',
     },
@@ -287,11 +334,11 @@ await fastify.register(fastifyPrometheusPlugin, {
 
 ## Tracing exemplars
 
-Exemplars link a metric sample to the trace that produced it, so a latency spike on a
-dashboard can be opened as an example trace. They are part of the
+Exemplars link a metric sample to the trace that produced it, so a latency spike
+on a dashboard can be opened as an example trace. They are part of the
 [OpenMetrics](https://github.com/prometheus/OpenMetrics/blob/main/specification/OpenMetrics.md#exemplars)
-format, so `exemplars` requires `openMetrics: true`. Registering the plugin with `exemplars` but
-without `openMetrics` throws an error.
+format, so `exemplars` requires `openMetrics: true`. Registering the plugin with
+`exemplars` but without `openMetrics` throws an error.
 
 ```typescript
 import { Registry } from 'prom-client';
@@ -304,25 +351,25 @@ await fastify.register(fastifyPrometheusPlugin, {
 ```
 
 With `exemplars: true`, the `trace_id` and `span_id` of the active
-[OpenTelemetry](https://opentelemetry.io/docs/languages/js/) span are attached to the
-request-duration histogram (`http_request_duration_ms`) and the request counter
-(`http_requests_total`):
+[OpenTelemetry](https://opentelemetry.io/docs/languages/js/) span are attached
+to the request-duration histogram (`http_request_duration_ms`) and the request
+counter (`http_requests_total`):
 
 ```text
 http_requests_total{method="GET",route="/users",status_code="200"} 1 # {trace_id="0af7651916cd43dd8448eb211c80319c",span_id="b7ad6b7169203331"} 1 1731830400.000
 ```
 
-`@opentelemetry/api` is an **optional** peer dependency. Install it (and set up the OpenTelemetry
-SDK) to get exemplars. If it isn't installed, if no span is active, or if the span is not sampled,
-metrics are recorded without an exemplar.
+`@opentelemetry/api` is an **optional** peer dependency. Install it (and set up
+the OpenTelemetry SDK) to get exemplars. If it isn't installed, if no span is
+active, or if the span is not sampled, metrics are recorded without an exemplar.
 
-The exemplar is captured in the `onRequest` hook, while the request's span is still active
-(tracing instrumentations often end the span before `onResponse`). If nothing is captured
-there, the extractor runs once more in `onResponse`, so labels set by a route handler are also
-picked up.
+The exemplar is captured in the `onRequest` hook, while the request's span is
+still active (tracing instrumentations often end the span before `onResponse`).
+If nothing is captured there, the extractor runs once more in `onResponse`, so
+labels set by a route handler are also picked up.
 
-To supply exemplar labels yourself, pass a function instead of `true`. Return `undefined` to skip
-the exemplar for that request:
+To supply exemplar labels yourself, pass a function instead of `true`. Return
+`undefined` to skip the exemplar for that request:
 
 ```typescript
 await fastify.register(fastifyPrometheusPlugin, {
@@ -339,47 +386,146 @@ await fastify.register(fastifyPrometheusPlugin, {
 ```
 
 Exemplar labels must be a valid OpenMetrics label set: label names match
-`[a-zA-Z_][a-zA-Z0-9_]*`, values are strings, and the names and values together are at most 128
-characters. An invalid label set, or an extractor that throws, is dropped and the observation is
-recorded without an exemplar, so one bad request can't break the `/metrics` output.
+`[a-zA-Z_][a-zA-Z0-9_]*`, values are strings, and the names and values together
+are at most 128 characters. An invalid label set, or an extractor that throws,
+is dropped and the observation is recorded without an exemplar, so one bad
+request can't break the `/metrics` output.
 
-Only the plugin's own request hooks attach exemplars. The `fastify.prometheus` helpers
-(`incrementCounter`, `observeHistogram`, `recordHttpRequest`) keep working on the
-exemplar-enabled metrics but record without an exemplar.
+Only the plugin's own request hooks attach exemplars. The `fastify.prometheus`
+helpers (`incrementCounter`, `observeHistogram`, `recordHttpRequest`) keep
+working on the exemplar-enabled metrics but record without an exemplar.
 
-The built-in extractor is exported as `otelExemplarExtractor` if you want to wrap it.
+The built-in extractor is exported as `otelExemplarExtractor` if you want to
+wrap it.
 
-> **Warning:** `openMetrics: true` changes the exposition format of the registry the plugin
-> uses. Without a `register` option that is prom-client's **shared global registry**, so every
-> other consumer of it (another `/metrics` route, `register.metrics()` calls, other libraries)
-> switches to OpenMetrics output too. Pass a dedicated `register: new Registry()` when you enable
-> OpenMetrics. With default options, `/metrics` stays in Prometheus text format 0.0.4.
+> **Warning:** `openMetrics: true` changes the exposition format of the registry
+> the plugin uses. Without a `register` option that is prom-client's **shared
+> global registry**, so every other consumer of it (another `/metrics` route,
+> `register.metrics()` calls, other libraries) switches to OpenMetrics output
+> too. Pass a dedicated `register: new Registry()` when you enable OpenMetrics.
+> With default options, `/metrics` stays in Prometheus text format 0.0.4.
 
 The `/metrics` response's `Content-Type` always comes from the registry
 (`text/plain; version=0.0.4; charset=utf-8` by default, or
-`application/openmetrics-text; version=1.0.0; charset=utf-8` with `openMetrics`).
+`application/openmetrics-text; version=1.0.0; charset=utf-8` with
+`openMetrics`).
 
 ## Configuration Options
 
 ### `FastifyPrometheusOptions`
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `endpoint` | `string` | `'/metrics'` | Metrics endpoint path |
-| `enableDefaultMetrics` | `boolean` | `true` | Enable Node.js default metrics |
-| `defaultMetricsInterval` | `number` | `10000` | Default metrics collection interval (ms) |
-| `httpMetrics` | `HttpMetricsConfig` | See defaults | HTTP metrics configuration |
-| `customMetrics` | `CustomMetricDefinition[]` | `[]` | Custom metrics definitions |
-| `awsCloudWatch` | `AwsExporterConfig` | `undefined` | AWS CloudWatch integration |
-| `excludeRoutes` | `string[]` | `['/health', '/healthcheck']` | Routes to exclude |
-| `includeRoutes` | `string[]` | `undefined` | Routes to include (if specified, only these routes are included) |
-| `defaultLabels` | `Record<string, string>` | `{}` | Default labels for all metrics |
-| `openMetrics` | `boolean` | `false` | Serve `/metrics` in OpenMetrics format (switches the registry's content type) |
-| `exemplars` | `boolean \| ExemplarExtractor` | `false` | Attach tracing exemplars to the request-duration histogram and request counter; requires `openMetrics: true` |
+| Option                   | Type                           | Default                       | Description                                                                                                  |
+| ------------------------ | ------------------------------ | ----------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| `endpoint`               | `string`                       | `'/metrics'`                  | Metrics endpoint path                                                                                        |
+| `enableDefaultMetrics`   | `boolean`                      | `true`                        | Enable Node.js default metrics                                                                               |
+| `defaultMetricsInterval` | `number`                       | `10000`                       | Default metrics collection interval (ms)                                                                     |
+| `httpMetrics`            | `HttpMetricsConfig`            | See defaults                  | HTTP metrics configuration                                                                                   |
+| `customMetrics`          | `CustomMetricDefinition[]`     | `[]`                          | Custom metrics definitions                                                                                   |
+| `awsCloudWatch`          | `AwsExporterConfig`            | `undefined`                   | AWS CloudWatch integration                                                                                   |
+| `excludeRoutes`          | `RouteMatcher[]`               | `['/health', '/healthcheck']` | Routes to exclude (see [Route filtering](#route-filtering))                                                  |
+| `includeRoutes`          | `RouteMatcher[]`               | `undefined`                   | Routes to include (if specified, only these routes are included)                                             |
+| `routeMatch`             | `'substring' \| 'exact'`       | `'substring'`                 | String matching mode for `excludeRoutes` / `includeRoutes`                                                   |
+| `unmatchedRouteLabel`    | `string`                       | `undefined`                   | `route` label for unmatched requests (404s); raw URL if unset                                                |
+| `defaultLabels`          | `Record<string, string>`       | `{}`                          | Default labels for all metrics                                                                               |
+| `prefix`                 | `string`                       | `undefined`                   | Prefix for HTTP and custom metric names (see below)                                                          |
+| `openMetrics`            | `boolean`                      | `false`                       | Serve `/metrics` in OpenMetrics format (switches the registry's content type)                                |
+| `exemplars`              | `boolean \| ExemplarExtractor` | `false`                       | Attach tracing exemplars to the request-duration histogram and request counter; requires `openMetrics: true` |
+
+`prefix` is prepended verbatim to the HTTP, in-flight and custom metric names
+(`'myapp_'` gives `myapp_http_requests_total`). It is not applied to Node.js
+default metrics or CloudWatch export names (see #254). Context methods such as
+`incrementCounter` still take the unprefixed name.
+
+`HttpMetricsConfig` accepts `requestDuration`, `requestCount`, `responseSize`,
+`errorCount`, `successCount` and `inFlight` (`InFlightConfig`: `enabled`,
+`name`, `help`; off by default).
+
+**A partial `httpMetrics` replaces the defaults.** Options are merged shallowly,
+so passing `httpMetrics` replaces the whole default HTTP metrics config: only
+the metrics you list are registered. To add `inFlight` and keep the default
+metrics, list each default metric next to it:
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  httpMetrics: {
+    requestDuration: {
+      enabled: true,
+      name: 'http_request_duration_ms',
+      help: 'Duration of HTTP requests in milliseconds',
+      buckets: [0.1, 5, 15, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    requestCount: {
+      enabled: true,
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    responseSize: {
+      enabled: true,
+      name: 'http_response_size_bytes',
+      help: 'Size of HTTP responses in bytes',
+      buckets: [1, 100, 1000, 10000, 100000, 1000000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    errorCount: {
+      enabled: true,
+      name: 'http_errors_total',
+      help: 'Total number of HTTP errors',
+      labels: ['method', 'route', 'status_code'],
+    },
+    successCount: {
+      enabled: true,
+      name: 'http_success_total',
+      help: 'Total number of successful HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    inFlight: { enabled: true },
+  },
+});
+```
+
+### Route filtering
+
+Filters are applied to the registered route pattern (for example `/users/:id`),
+or, for requests that match no route, to the raw request URL.
+`unmatchedRouteLabel` only changes the emitted `route` label afterwards, so
+`includeRoutes: [/^\/api\//]` still records a 404 on `/api/missing` (labelled
+`__unmatched__` if set). Each entry in `excludeRoutes` / `includeRoutes` is a
+`RouteMatcher`:
+
+- a `string`, matched with `String.includes()` by default, or by equality with
+  `routeMatch: 'exact'`
+- a `RegExp`, tested against the route (`routeMatch` does not apply)
+- a function `(route: string) => boolean`. It runs on every response, so it
+  should be cheap and must not throw (an error raised in it surfaces from the
+  `onResponse` hook)
+
+A route is skipped if it matches any `excludeRoutes` entry, or if
+`includeRoutes` is non-empty and the route matches none of its entries.
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  routeMatch: 'exact', // '/health' no longer drops '/healthcare'
+  excludeRoutes: [
+    '/health',
+    /^\/internal\//,
+    route => route.endsWith('/debug'),
+  ],
+  unmatchedRouteLabel: '__unmatched__', // all 404s share one label value
+});
+
+// Per-route opt-out
+fastify.get('/ping', { config: { metrics: false } }, async () => 'pong');
+```
+
+The filter logic is exported as a pure helper, `shouldRecord(route, config)`, if
+you need the same decision elsewhere.
 
 ## TypeScript Support
 
-This plugin is written in TypeScript and provides comprehensive type definitions:
+This plugin is written in TypeScript and provides comprehensive type
+definitions:
 
 ```typescript
 import fastifyPrometheusPlugin, {
@@ -409,12 +555,20 @@ fastify.prometheus.incrementCounter('my_counter', { label: 'value' });
 - HTTP metrics are collected using Fastify hooks for optimal performance
 - Default metrics collection can be disabled if not needed
 - Route filtering helps reduce metric cardinality
-- Histogram buckets should be carefully chosen to balance accuracy and performance
+- Histogram buckets should be carefully chosen to balance accuracy and
+  performance
 
 ## Best Practices
 
-1. **Metric Naming**: Follow Prometheus naming conventions (`snake_case`, descriptive names)
-2. **Label Cardinality**: Keep the number of unique label combinations reasonable to avoid high cardinality
+1. **Metric Naming**: Follow Prometheus naming conventions (`snake_case`,
+   descriptive names)
+2. **Label Cardinality**: Keep the number of unique label combinations
+   reasonable to avoid high cardinality. By default, requests that match no
+   route (404 scanners, typos, URLs with IDs or query strings) use the raw URL
+   as the `route` label, so every distinct URL creates new time series. Set
+   `unmatchedRouteLabel: '__unmatched__'` to collapse them into one series, and
+   prefer `routeMatch: 'exact'` so `excludeRoutes` entries don't accidentally
+   drop similarly named routes
 3. **Histogram Buckets**: Choose buckets that make sense for your use case
 4. **Route Filtering**: Exclude health check and internal routes from metrics
 5. **Custom Metrics**: Define custom metrics that provide business value
@@ -428,7 +582,9 @@ Check out the [examples](./examples) directory for complete working examples:
 
 ## Contributing
 
-Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
+Contributions are welcome! Please read our
+[Contributing Guide](./CONTRIBUTING.md) for details on our code of conduct and
+the process for submitting pull requests.
 
 ### Development Setup
 
@@ -436,7 +592,8 @@ This project uses Yarn for package management and development workflows.
 
 #### Prerequisites
 
-- **Node.js**: Version 22.0.0 or higher (we recommend using the latest LTS version). CI tests Node.js 22, 24, and 26.
+- **Node.js**: Version 22.0.0 or higher (we recommend using the latest LTS
+  version). CI tests Node.js 22, 24, and 26.
 - **Yarn**: Version 4.6.0 (managed via Corepack)
 
 #### Getting Started
@@ -501,26 +658,33 @@ yarn type-check
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
+This project is licensed under the MIT License - see the [LICENSE](./LICENSE)
+file for details.
 
 ## Documentation
 
 ### Guides
-- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire from `main`
-- [Branching Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based flow and commit conventions
+
+- [Release Guide](./docs/RELEASE_GUIDE.md) — how stable releases fire from
+  `main`
+- [Branching Strategy](./docs/BRANCHING_STRATEGY.md) — trunk-based flow and
+  commit conventions
 - [Development Guide](./docs/DEVELOPMENT.md)
 - [Contributing Guidelines](./CONTRIBUTING.md)
 - [Security Analysis](./docs/SECURITY_ANALYSIS.md)
 
 ### Releases
+
 - **Stable** (default): published from `main` by CI
-- **Alpha / beta**: listed in `.releaserc.js` for `feature/*` / `release/*` but **not published by CI today** (no `@rc`, `@next`, or `@hotfix` channels)
+- **Alpha / beta**: listed in `.releaserc.js` for `feature/*` / `release/*` but
+  **not published by CI today** (no `@rc`, `@next`, or `@hotfix` channels)
 
 ## Support
 
 - 📖 [Documentation](./docs/) - Complete documentation in `/docs` folder
 - 🐛 [Issue Tracker](https://github.com/llevintza/aws-fastify-prometheus/issues)
-- 💬 [Discussions](https://github.com/llevintza/aws-fastify-prometheus/discussions)
+- 💬
+  [Discussions](https://github.com/llevintza/aws-fastify-prometheus/discussions)
 
 ## Changelog
 
