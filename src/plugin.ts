@@ -96,8 +96,9 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   fastify: FastifyInstance,
   options: FastifyPrometheusOptions
 ) => {
-  // httpMetrics is deep-merged and the route defaults are applied field by field, so an
-  // explicit `undefined` from JavaScript callers can't erase a default.
+  // httpMetrics is deep-merged, and routeMatch / unmatchedRouteLabel are resolved with `??`, so
+  // an explicit `undefined` from JavaScript callers can't erase those defaults. Other options
+  // are spread as before (e.g. `excludeRoutes: undefined` still clears the default list).
   const config = {
     ...DEFAULT_OPTIONS,
     ...options,

@@ -66,6 +66,17 @@ describe('mergeHttpMetrics', () => {
     expect(merged.requestDuration).toEqual(defaults.requestDuration);
   });
 
+  test('null values from JavaScript callers are treated as unset', () => {
+    const overrides = {
+      requestCount: { name: null, help: 'New help' },
+      requestDuration: null,
+    } as unknown as HttpMetricsConfig;
+    const merged = mergeHttpMetrics(defaults, overrides);
+    expect(merged.requestCount).toEqual({ ...defaults.requestCount, help: 'New help' });
+    expect(merged.requestDuration).toEqual(defaults.requestDuration);
+    expect(mergeHttpMetrics(defaults, null)).toEqual(defaults);
+  });
+
   test('keeps metrics that only exist in the overrides', () => {
     const merged = mergeHttpMetrics({}, { errorCount: { enabled: true, name: 'errors' } });
     expect(merged).toEqual({ errorCount: { enabled: true, name: 'errors' } });

@@ -5,15 +5,16 @@
 import type { HttpMetricsConfig } from './types';
 
 /**
- * Copy `base`, then overwrite it with every field of `overrides` that is not `undefined`.
- * Arrays (`buckets`, `labels`) are replaced, not concatenated. Neither input is mutated.
+ * Copy `base`, then overwrite it with every field of `overrides` that is not `undefined` or
+ * `null` (JavaScript callers may pass `null` for "unset"). Arrays (`buckets`, `labels`) are
+ * replaced, not concatenated. Neither input is mutated.
  */
 function mergeDefined<T extends object>(base: T | undefined, overrides: T | undefined): T {
   const merged = { ...base } as T;
-  if (overrides !== undefined) {
+  if (overrides !== undefined && overrides !== null) {
     for (const key of Object.keys(overrides) as (keyof T)[]) {
       const value = overrides[key];
-      if (value !== undefined) {
+      if (value !== undefined && value !== null) {
         merged[key] = value;
       }
     }
@@ -28,7 +29,7 @@ function mergeDefined<T extends object>(base: T | undefined, overrides: T | unde
  */
 export function mergeHttpMetrics(
   defaults: HttpMetricsConfig,
-  overrides?: HttpMetricsConfig
+  overrides?: HttpMetricsConfig | null
 ): HttpMetricsConfig {
   const merged: HttpMetricsConfig = {};
   const keys = new Set([...Object.keys(defaults), ...Object.keys(overrides ?? {})]) as Set<
@@ -37,7 +38,7 @@ export function mergeHttpMetrics(
 
   for (const key of keys) {
     const base = defaults[key];
-    const override = overrides?.[key];
+    const override = overrides?.[key] ?? undefined;
     if (base !== undefined || override !== undefined) {
       Object.assign(merged, { [key]: mergeDefined<object>(base, override) });
     }
