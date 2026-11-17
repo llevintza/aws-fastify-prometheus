@@ -242,7 +242,8 @@ jobs:
           PACKAGE: ${{ needs.package-validation.result }}
           REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
         with:
-          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || github.token }}
+          # Placeholder when secret absent (forks); script returns before Octokit use.
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || 'unused' }}
           script: |
             const fs = require('fs');
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;

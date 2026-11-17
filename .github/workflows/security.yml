@@ -35,17 +35,25 @@ jobs:
         uses: github/codeql-action/analyze@v4
 
       - name: Run Semgrep
-        continue-on-error: true
-        uses: docker://semgrep/semgrep:1.110.0
-        with:
-          args: >-
-            scan
-            --config=p/security-audit
-            --config=p/secrets
-            --config=p/javascript
-            --config=p/typescript
-            --config=p/nodejs
+        run: |
+          set +e
+          docker run --rm -v "$PWD:/src" -w /src semgrep/semgrep:1.110.0 \
+            semgrep scan \
+            --config=p/security-audit \
+            --config=p/secrets \
+            --config=p/javascript \
+            --config=p/typescript \
+            --config=p/nodejs \
             .
+          status=$?
+          set -e
+          # Semgrep: 0 clean, 1 findings, >=2 tool/config failure.
+          if [[ "$status" -gt 1 ]]; then
+            echo "::error::Semgrep tool error (exit $status)"
+            exit "$status"
+          fi
+          echo "Semgrep finished (exit $status; 1 means findings only, job stays green)"
+          exit 0
 
       - name: Check for secrets in code
         uses: trufflesecurity/trufflehog@v3.99.9
@@ -89,14 +97,15 @@ jobs:
         env:
           REPORT_TOKEN: ${{ secrets.CODE_QUALITY_REPORT_TOKEN }}
         with:
-          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || github.token }}
+          # Placeholder when secret absent (forks); script returns before Octokit use.
+          github-token: ${{ secrets.CODE_QUALITY_REPORT_TOKEN || 'unused' }}
           script: |
             const runUrl = `${process.env.GITHUB_SERVER_URL}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
             const summary = [
               '## Security Analysis',
               '',
               '- CodeQL: see the repository **Security → Code scanning** tab',
-              '- Semgrep: see this job log (continue-on-error)',
+              '- Semgrep: pinned `semgrep/semgrep:1.110.0`; tool errors fail, findings do not',
               '- TruffleHog: verified secrets only (job fails on findings)',
               '- Dependency audit on PRs: owned by **CI/CD → Security Audit**',
               '',

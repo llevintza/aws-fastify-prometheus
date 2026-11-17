@@ -56,12 +56,12 @@ Shared setup:
 
 ## Security Analysis (`security.yml`)
 
-| Check             | Notes                                                         |
-| ----------------- | ------------------------------------------------------------- |
-| CodeQL            | Uploads to Security → Code scanning                           |
-| Semgrep           | Pinned `semgrep/semgrep:1.110.0` container; continue-on-error |
-| TruffleHog        | Action + scanner `version: 3.99.9`; verified secrets only     |
-| Weekly yarn audit | Schedule only → `security-reports` artifact                   |
+| Check             | Notes                                                             |
+| ----------------- | ----------------------------------------------------------------- |
+| CodeQL            | Uploads to Security → Code scanning                               |
+| Semgrep           | Pinned `semgrep/semgrep:1.110.0`; tool errors fail, findings soft |
+| TruffleHog        | Action + scanner `version: 3.99.9`; verified secrets only         |
+| Weekly yarn audit | Schedule only → `security-reports` artifact                       |
 
 PR comment: short pointer (`<!-- ci-report:security -->`), not vuln lists.
 
