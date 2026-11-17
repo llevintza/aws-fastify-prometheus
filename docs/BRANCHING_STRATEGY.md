@@ -35,28 +35,19 @@ Details, secrets overview, Dependabot contract bumps, and dry-run: [RELEASE_GUID
 
 Manual scopes: `(major)`, `(minor)`, `(patch)`, `(no-release)`.
 
-```
-<type>[optional scope]: <description>
-
-[optional body]
-
-[optional footer(s)]
-```
+Header shape: `<type>(<optional-scope>): <subject>` (enforced by commitlint;
+details in [AGENTS.md](../AGENTS.md)).
 
 Examples:
 
 ```bash
-git commit -m "feat: add custom histogram buckets"
-# → minor
-
-git commit -m "fix: resolve memory leak in metrics collection"
-# → patch
-
-git commit -m "feat!: remove deprecated metrics endpoints
-
-BREAKING CHANGE: Deprecated endpoints are gone; migrate to the current API."
-# → major
+git commit -m "feat: add custom histogram buckets"   # → minor
+git commit -m "fix: resolve memory leak in metrics collection"  # → patch
 ```
+
+Breaking: `feat!: …` and/or a `BREAKING CHANGE:` footer → major. Agent commit
+rules: [AGENTS.md](../AGENTS.md). Operator release flow:
+[RELEASE_GUIDE.md](RELEASE_GUIDE.md).
 
 ## Dependency updates
 

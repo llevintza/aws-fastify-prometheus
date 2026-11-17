@@ -28,19 +28,13 @@ npm install @llevintza/fastify-prometheus-metrics
 
 ## Conventional commit rules
 
-Version bumps come from commit messages (and the Dependabot contract plugin below):
+Version impact table and examples:
+[BRANCHING_STRATEGY.md → Conventional commits](BRANCHING_STRATEGY.md#conventional-commits--version).
+Dependabot `chore(deps)` commits are scored by the contract plugin below instead of
+the type alone.
 
-| Commit | Package bump |
-|--------|----------------|
-| `feat:` | **minor** |
-| `fix:` | **patch** |
-| `perf:` | **minor** (also patch rules exist; prefer `feat`/`fix` when unsure) |
-| `feat!:` / `fix!:` / `BREAKING CHANGE:` footer on feat/fix/perf/refactor | **major** |
-| `chore:`, `test:`, `ci:` | **no release** (unless the Dependabot analyzer scores the commit) |
-
-Manual scopes still work: `(major)`, `(minor)`, `(patch)`, `(no-release)`. Prefer conventional types for normal work.
-
-Config: [`.releaserc.js`](../.releaserc.js). Analyzer: [`scripts/semantic-release-analyze-commits.js`](../scripts/semantic-release-analyze-commits.js).
+Config: [`.releaserc.js`](../.releaserc.js). Analyzer:
+[`scripts/semantic-release-analyze-commits.js`](../scripts/semantic-release-analyze-commits.js).
 
 ## Contract-based dependency bumps
 
@@ -100,3 +94,5 @@ This analyzes commits and reports the next version without publishing or pushing
 - [Branching Strategy](BRANCHING_STRATEGY.md) — trunk-based flow aligned with main-only publish
 - [Development Guide](DEVELOPMENT.md)
 - [Contributing](../CONTRIBUTING.md)
+- Dependabot config: [`.github/dependabot.yml`](../.github/dependabot.yml)
+- CI overview: [`.github/WORKFLOWS_SUMMARY.md`](../.github/WORKFLOWS_SUMMARY.md)
