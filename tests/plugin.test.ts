@@ -395,6 +395,44 @@ describe('Fastify Prometheus Plugin', () => {
       await fastify.close();
     });
 
+    test('filters unmatched URLs like the HTTP counters do', async () => {
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        excludeRoutes: ['/ignored'],
+        unmatchedRouteLabel: '__unmatched__',
+        httpMetrics: {
+          requestCount: {
+            enabled: true,
+            name: 'http_requests_total',
+            help: 'Total number of HTTP requests',
+            labels: ['method', 'route', 'status_code'],
+          },
+          inFlight: { enabled: true },
+        },
+      });
+
+      const seen: Record<string, number> = {};
+      fastify.setNotFoundHandler(async (request, reply) => {
+        seen[request.url] = await gaugeValue();
+        return reply.code(404).send('not found');
+      });
+
+      await fastify.inject({ method: 'GET', url: '/ignored/x' });
+      await fastify.inject({ method: 'GET', url: '/other' });
+
+      // Filtering runs on the raw URL before the unmatched label is applied
+      expect(seen).toEqual({ '/ignored/x': 0, '/other': 1 });
+      expect(await gaugeValue()).toBe(0);
+
+      const counter = await registry.getSingleMetric('http_requests_total')?.get();
+      expect(counter?.values).toHaveLength(1);
+      expect(counter?.values[0]?.labels['route']).toBe('__unmatched__');
+
+      await fastify.close();
+    });
+
     test('returns to 0 after an aborted request without double-decrementing', async () => {
       const fastify = Fastify();
       await fastify.register(fastifyPrometheusPlugin, {
