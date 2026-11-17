@@ -10,7 +10,8 @@ import { trace } from '@opentelemetry/api';
 import Fastify from 'fastify';
 import { Registry } from 'prom-client';
 
-import fastifyPrometheusPlugin from '../src/index';
+import fastifyPrometheusPlugin, { AwsMetricsExporter } from '../src/index';
+import type { FastifyPrometheusOptions } from '../src/index';
 import { elapsedMs, prefixMetricName } from '../src/metric-utils';
 
 async function waitFor(
@@ -548,6 +549,172 @@ describe('Fastify Prometheus Plugin', () => {
       );
 
       await fastify.close();
+    });
+  });
+
+  describe('prefix for Node.js default metrics and CloudWatch export names', () => {
+    const awsCloudWatch = { region: 'us-east-1', namespace: 'Test/App' };
+    // httpMetrics is deep-merged with the defaults (3.0), so turn off what these tests don't use
+    const noHttpMetrics = {
+      requestDuration: { enabled: false },
+      requestCount: { enabled: false },
+      responseSize: { enabled: false },
+      errorCount: { enabled: false },
+      successCount: { enabled: false },
+    };
+    const httpMetrics = { ...noHttpMetrics, requestCount: { enabled: true } };
+    const customMetrics: FastifyPrometheusOptions['customMetrics'] = [
+      { type: 'counter', name: 'jobs_total', help: 'Jobs' },
+      { type: 'gauge', name: 'queue_depth', help: 'Queue depth' },
+      { type: 'histogram', name: 'job_duration', help: 'Job duration' },
+      { type: 'summary', name: 'job_size', help: 'Job size' },
+    ];
+
+    afterEach(() => {
+      jest.restoreAllMocks();
+    });
+
+    const defaultMetricNames = async (options: FastifyPrometheusOptions): Promise<string[]> => {
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: true,
+        httpMetrics: noHttpMetrics,
+        ...options,
+      });
+      await fastify.ready();
+      const names = registry.getMetricsAsArray().map(m => m.name);
+      await fastify.close();
+      return names;
+    };
+
+    test('prefixes Node.js default metrics when prefixDefaultMetrics is true', async () => {
+      const names = await defaultMetricNames({ prefix: 'myapp_', prefixDefaultMetrics: true });
+
+      expect(names).toContain('myapp_process_cpu_user_seconds_total');
+      expect(names.some(name => name.startsWith('myapp_nodejs_'))).toBe(true);
+      expect(names.every(name => name.startsWith('myapp_'))).toBe(true);
+    });
+
+    test('keeps Node.js default metrics unprefixed without prefixDefaultMetrics', async () => {
+      const names = await defaultMetricNames({ prefix: 'myapp_' });
+
+      expect(names).toContain('process_cpu_user_seconds_total');
+      expect(names.some(name => name.startsWith('myapp_'))).toBe(false);
+    });
+
+    test('prefixDefaultMetrics without a prefix leaves default metric names unchanged', async () => {
+      const prefixed = await defaultMetricNames({ prefixDefaultMetrics: true });
+      registry.clear();
+      const plain = await defaultMetricNames({});
+
+      expect(prefixed).toContain('process_cpu_user_seconds_total');
+      expect(prefixed.sort()).toEqual(plain.sort());
+    });
+
+    const exportedNames = async (options: FastifyPrometheusOptions): Promise<string[]> => {
+      const exportMetric = jest
+        .spyOn(AwsMetricsExporter.prototype, 'exportMetric')
+        .mockImplementation(() => undefined);
+      jest.spyOn(AwsMetricsExporter.prototype, 'flush').mockResolvedValue(undefined);
+
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        httpMetrics,
+        customMetrics,
+        ...options,
+      });
+      fastify.get('/test', () => ({ ok: true }));
+
+      await fastify.inject({ method: 'GET', url: '/test' });
+      fastify.prometheus.incrementCounter('jobs_total');
+      fastify.prometheus.setGauge('queue_depth', 3);
+      fastify.prometheus.observeHistogram('job_duration', 5);
+      fastify.prometheus.observeSummary('job_size', 7);
+      fastify.prometheus.recordHttpRequest({
+        method: 'GET',
+        route: '/manual',
+        statusCode: 200,
+        duration: 1,
+        labels: { method: 'GET', route: '/manual', status_code: '200' },
+      });
+
+      await fastify.close();
+      return exportMetric.mock.calls.map(([name]) => name);
+    };
+
+    test('applies the prefix to CloudWatch export names when applyPrefix is true', async () => {
+      const names = await exportedNames({
+        prefix: 'myapp_',
+        awsCloudWatch: { ...awsCloudWatch, applyPrefix: true },
+      });
+
+      expect(names).toEqual([
+        'myapp_http_requests_total',
+        'myapp_jobs_total',
+        'myapp_queue_depth',
+        'myapp_job_duration',
+        'myapp_job_size',
+        'myapp_http_requests_total',
+      ]);
+      // CloudWatch names now match the Prometheus series names
+      const prometheusNames = registry.getMetricsAsArray().map(m => m.name);
+      expect(prometheusNames).toEqual(expect.arrayContaining([...new Set(names)]));
+    });
+
+    test('keeps CloudWatch export names unprefixed without applyPrefix', async () => {
+      const unprefixed = [
+        'http_requests_total',
+        'jobs_total',
+        'queue_depth',
+        'job_duration',
+        'job_size',
+        'http_requests_total',
+      ];
+
+      expect(await exportedNames({ prefix: 'myapp_', awsCloudWatch })).toEqual(unprefixed);
+      jest.restoreAllMocks();
+      registry.clear();
+      expect(
+        await exportedNames({ awsCloudWatch: { ...awsCloudWatch, applyPrefix: true } })
+      ).toEqual(unprefixed);
+    });
+
+    test('leaves /metrics output unchanged when the new options are not set', async () => {
+      const render = async (options: FastifyPrometheusOptions): Promise<string> => {
+        const fastify = Fastify();
+        await fastify.register(fastifyPrometheusPlugin, {
+          register: registry,
+          enableDefaultMetrics: true,
+          prefix: 'myapp_',
+          httpMetrics,
+          ...options,
+        });
+        fastify.get('/test', () => ({ ok: true }));
+        await fastify.inject({ method: 'GET', url: '/test' });
+        const names = registry
+          .getMetricsAsArray()
+          .map(m => m.name)
+          .sort()
+          .join('\n');
+        await fastify.close();
+        registry.clear();
+        return names;
+      };
+
+      const baseline = await render({});
+      expect(baseline).toContain('myapp_http_requests_total');
+      expect(baseline).toContain('process_cpu_user_seconds_total');
+      expect(baseline).not.toContain('myapp_process_');
+      // Explicitly disabled flags behave exactly like omitting them
+      expect(
+        await render({
+          prefixDefaultMetrics: false,
+          awsCloudWatch: { ...awsCloudWatch, applyPrefix: false },
+        })
+      ).toBe(baseline);
     });
   });
 

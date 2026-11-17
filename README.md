@@ -322,6 +322,12 @@ await fastify.register(fastifyPrometheusPlugin, {
 });
 ```
 
+`AwsExporterConfig` also accepts `applyPrefix` (default `false`). When it is
+`true`, the plugin's top-level `prefix` is prepended to every exported metric
+name so CloudWatch and Prometheus names match (see
+[Configuration Options](#configuration-options)). `AwsMetricsExporter` used on
+its own ignores it.
+
 ## Tracing exemplars
 
 Exemplars link a metric sample to the trace that produced it, so a latency spike
@@ -427,13 +433,28 @@ The `/metrics` response's `Content-Type` always comes from the registry
 | `unmatchedRouteLabel`    | `string \| false`              | `'__unmatched__'`             | `route` label for unmatched requests (404s); `false` uses the raw URL                                        |
 | `defaultLabels`          | `Record<string, string>`       | `{}`                          | Default labels for all metrics                                                                               |
 | `prefix`                 | `string`                       | `undefined`                   | Prefix for HTTP and custom metric names (see below)                                                          |
+| `prefixDefaultMetrics`   | `boolean`                      | `false`                       | Also apply `prefix` to the Node.js default metrics (`process_*`, `nodejs_*`)                                 |
 | `openMetrics`            | `boolean`                      | `false`                       | Serve `/metrics` in OpenMetrics format (switches the registry's content type)                                |
 | `exemplars`              | `boolean \| ExemplarExtractor` | `false`                       | Attach tracing exemplars to the request-duration histogram and request counter; requires `openMetrics: true` |
 
 `prefix` is prepended verbatim to the HTTP, in-flight and custom metric names
-(`'myapp_'` gives `myapp_http_requests_total`). It is not applied to Node.js
-default metrics or CloudWatch export names (see #254). Context methods such as
-`incrementCounter` still take the unprefixed name.
+(`'myapp_'` gives `myapp_http_requests_total`). Context methods such as
+`incrementCounter` still take the unprefixed name. By default it is not applied
+to Node.js default metrics or CloudWatch export names. Both are opt-in:
+
+- `prefixDefaultMetrics: true` passes `prefix` to prom-client's
+  `collectDefaultMetrics`, so `process_cpu_user_seconds_total` becomes
+  `myapp_process_cpu_user_seconds_total`.
+- `awsCloudWatch.applyPrefix: true` applies `prefix` to the metric names
+  exported to CloudWatch, so they match the Prometheus names.
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  prefix: 'myapp_',
+  prefixDefaultMetrics: true,
+  awsCloudWatch: { region: 'us-east-1', namespace: 'MyApp', applyPrefix: true },
+});
+```
 
 `HttpMetricsConfig` accepts `requestDuration`, `requestCount`, `responseSize`,
 `errorCount`, `successCount` and `inFlight` (`InFlightConfig`: `enabled`,

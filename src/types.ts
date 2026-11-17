@@ -128,6 +128,13 @@ export interface FastifyPrometheusOptions extends FastifyPluginOptions {
    * unprefixed name. Default: no prefix.
    */
   prefix?: string;
+
+  /**
+   * Also pass `prefix` to prom-client's `collectDefaultMetrics`, so the Node.js default metrics
+   * (`process_*`, `nodejs_*`) are prefixed too. Has no effect without `prefix` or when
+   * `enableDefaultMetrics` is false. Default: `false`.
+   */
+  prefixDefaultMetrics?: boolean;
 }
 
 /**
@@ -347,6 +354,13 @@ export interface AwsExporterConfig {
 
   /** CloudWatch endpoint URL (optional) */
   endpoint?: string;
+
+  /**
+   * Apply the plugin's top-level `prefix` to the metric names exported to CloudWatch, so they
+   * match the Prometheus names. Only read by the Fastify plugin; `AwsMetricsExporter` ignores it.
+   * Default: `false`.
+   */
+  applyPrefix?: boolean;
 
   /** AWS credentials (optional, uses default credential chain if not provided) */
   credentials?: {
