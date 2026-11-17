@@ -13,7 +13,7 @@ import {
   Registry,
   Summary,
 } from 'prom-client';
-import type { RegistryContentType } from 'prom-client';
+import type { DefaultMetricsCollectorConfiguration, RegistryContentType } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
 import { resolveExemplarExtractor, safeExtractExemplar } from './exemplars';
@@ -121,6 +121,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   if (config.awsCloudWatch) {
     awsExporter = new AwsMetricsExporter(config.awsCloudWatch);
   }
+  // Sink every CloudWatch export goes through; applies the prefix only when opted in
+  const cloudWatch = createCloudWatchSink(
+    awsExporter,
+    config.awsCloudWatch?.applyPrefix === true ? config.prefix : undefined
+  );
 
   // Set default labels
   if (config.defaultLabels && Object.keys(config.defaultLabels).length > 0) {
@@ -129,9 +134,14 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
   // Enable default metrics collection
   if (config.enableDefaultMetrics === true) {
-    collectDefaultMetrics({
+    const defaultMetricsOptions: DefaultMetricsCollectorConfiguration<RegistryContentType> = {
       register: metricsRegistry,
-    });
+    };
+    // Opt-in: prefix the Node.js default metrics (process_*, nodejs_*) as well
+    if (config.prefixDefaultMetrics === true && config.prefix !== undefined) {
+      defaultMetricsOptions.prefix = config.prefix;
+    }
+    collectDefaultMetrics(defaultMetricsOptions);
   }
 
   // Initialize HTTP metrics
@@ -273,7 +283,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
         metricsData,
         config.httpMetrics,
         metrics,
-        awsExporter,
+        cloudWatch,
         exemplarMetrics,
         exemplarLabels
       );
@@ -295,9 +305,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
       if (metric !== undefined) {
         incrementCounterMetric(metric, exemplarMetrics.has(name), labels, value);
 
-        if (awsExporter !== undefined) {
-          awsExporter.exportMetric(name, value, labels);
-        }
+        cloudWatch?.exportMetric(name, value, labels);
       }
     },
 
@@ -310,9 +318,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
           metric.set(value);
         }
 
-        if (awsExporter !== undefined) {
-          awsExporter.exportMetric(name, value, labels);
-        }
+        cloudWatch?.exportMetric(name, value, labels);
       }
     },
 
@@ -321,9 +327,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
       if (metric !== undefined) {
         observeHistogramMetric(metric, exemplarMetrics.has(name), value, labels);
 
-        if (awsExporter !== undefined) {
-          awsExporter.exportMetric(name, value, labels);
-        }
+        cloudWatch?.exportMetric(name, value, labels);
       }
     },
 
@@ -336,15 +340,13 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
           metric.observe(value);
         }
 
-        if (awsExporter !== undefined) {
-          awsExporter.exportMetric(name, value, labels);
-        }
+        cloudWatch?.exportMetric(name, value, labels);
       }
     },
 
     recordHttpRequest(httpMetrics: HttpRequestMetrics): void {
       if (config.httpMetrics) {
-        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter, exemplarMetrics);
+        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, cloudWatch, exemplarMetrics);
       }
     },
   };
@@ -618,13 +620,35 @@ function createInFlightGauge(
 }
 
 /**
+ * The CloudWatch export surface the plugin records into
+ */
+type CloudWatchSink = Pick<AwsMetricsExporter, 'exportMetric'>;
+
+/**
+ * Wrap the exporter so every exported metric name gets `prefix` (none when unset/empty).
+ * Returns `undefined` when CloudWatch export is not configured.
+ */
+function createCloudWatchSink(
+  exporter: AwsMetricsExporter | undefined,
+  prefix: string | undefined
+): CloudWatchSink | undefined {
+  if (exporter === undefined) {
+    return undefined;
+  }
+  return {
+    exportMetric: (name, value, labels, timestamp) =>
+      exporter.exportMetric(prefixMetricName(name, prefix), value, labels, timestamp),
+  };
+}
+
+/**
  * Record HTTP metrics
  */
 function recordHttpMetrics(
   requestMetrics: HttpRequestMetrics,
   config: HttpMetricsConfig,
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
-  awsExporter?: AwsMetricsExporter,
+  cloudWatch?: CloudWatchSink,
   exemplarMetrics?: Set<string>,
   exemplarLabels?: ExemplarLabels
 ): void {
@@ -720,13 +744,13 @@ function recordHttpMetrics(
   }
 
   // Export to AWS CloudWatch
-  if (awsExporter !== undefined) {
+  if (cloudWatch !== undefined) {
     if (
       config.requestDuration?.enabled === true &&
       typeof config.requestDuration.name === 'string' &&
       config.requestDuration.name.length > 0
     ) {
-      awsExporter.exportMetric(
+      cloudWatch.exportMetric(
         config.requestDuration.name,
         requestMetrics.duration,
         requestMetrics.labels
@@ -738,7 +762,7 @@ function recordHttpMetrics(
       typeof config.requestCount.name === 'string' &&
       config.requestCount.name.length > 0
     ) {
-      awsExporter.exportMetric(config.requestCount.name, 1, requestMetrics.labels);
+      cloudWatch.exportMetric(config.requestCount.name, 1, requestMetrics.labels);
     }
 
     if (
@@ -748,7 +772,7 @@ function recordHttpMetrics(
       typeof requestMetrics.responseSize === 'number' &&
       requestMetrics.responseSize > 0
     ) {
-      awsExporter.exportMetric(
+      cloudWatch.exportMetric(
         config.responseSize.name,
         requestMetrics.responseSize,
         requestMetrics.labels
@@ -761,7 +785,7 @@ function recordHttpMetrics(
       config.errorCount.name.length > 0 &&
       isError
     ) {
-      awsExporter.exportMetric(config.errorCount.name, 1, requestMetrics.labels);
+      cloudWatch.exportMetric(config.errorCount.name, 1, requestMetrics.labels);
     }
 
     if (
@@ -770,7 +794,7 @@ function recordHttpMetrics(
       config.successCount.name.length > 0 &&
       isSuccess
     ) {
-      awsExporter.exportMetric(config.successCount.name, 1, requestMetrics.labels);
+      cloudWatch.exportMetric(config.successCount.name, 1, requestMetrics.labels);
     }
   }
 }
