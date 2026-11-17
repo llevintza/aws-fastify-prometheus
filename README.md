@@ -327,15 +327,19 @@ await fastify.register(fastifyPrometheusPlugin, {
 
 ### Route filtering
 
-Filters are applied to the `route` label value: the registered route pattern
-(for example `/users/:id`), or, for unmatched requests, `unmatchedRouteLabel` if
-set and the raw URL otherwise. Each entry in `excludeRoutes` / `includeRoutes`
-is a `RouteMatcher`:
+Filters are applied to the registered route pattern (for example `/users/:id`),
+or, for requests that match no route, to the raw request URL.
+`unmatchedRouteLabel` only changes the emitted `route` label afterwards, so
+`includeRoutes: [/^\/api\//]` still records a 404 on `/api/missing` (labelled
+`__unmatched__` if set). Each entry in `excludeRoutes` / `includeRoutes` is a
+`RouteMatcher`:
 
 - a `string`, matched with `String.includes()` by default, or by equality with
   `routeMatch: 'exact'`
 - a `RegExp`, tested against the route (`routeMatch` does not apply)
-- a function `(route: string) => boolean`
+- a function `(route: string) => boolean`. It runs on every response, so it
+  should be cheap and must not throw (an error raised in it surfaces from the
+  `onResponse` hook)
 
 A route is skipped if it matches any `excludeRoutes` entry, or if
 `includeRoutes` is non-empty and the route matches none of its entries.

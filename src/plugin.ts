@@ -129,18 +129,20 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     // Per-route opt-out: fastify.get('/x', { config: { metrics: false } }, handler)
-    if (request.routeOptions.config.metrics === false) {
+    // `config` is typed as always set; the optional chain guards unusual not-found paths anyway.
+    if (request.routeOptions.config?.metrics === false) {
       return;
     }
 
+    // Decide record/skip on the matched pattern or the raw URL, then pick the emitted label.
     const matchedRoute = request.routeOptions.url;
+    if (!shouldRecord(matchedRoute ?? request.url, config)) {
+      return;
+    }
+
     const route =
       matchedRoute ??
       (typeof config.unmatchedRouteLabel === 'string' ? config.unmatchedRouteLabel : request.url);
-
-    if (!shouldRecord(route, config)) {
-      return;
-    }
 
     const duration = typeof request.startTime === 'number' ? Date.now() - request.startTime : 0;
     const labels = {

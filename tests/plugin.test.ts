@@ -273,6 +273,30 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
+  test('filters unmatched requests on the raw URL before applying unmatchedRouteLabel', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      includeRoutes: [/^\/api\//],
+      unmatchedRouteLabel: '__unmatched__',
+    });
+    fastify.get('/api/users', () => ({ ok: true }));
+
+    await Promise.all(
+      ['/api/missing/1', '/api/missing/2', '/web/missing', '/api/users'].map(url =>
+        fastify.inject({ method: 'GET', url })
+      )
+    );
+
+    const metricsText = await fastify.prometheus.getMetrics();
+    expect(new Set(routeLabels(metricsText))).toEqual(new Set(['__unmatched__', '/api/users']));
+    expect(metricsText).toContain(
+      'http_requests_total{method="GET",route="__unmatched__",status_code="404"} 2'
+    );
+
+    await fastify.close();
+  });
+
   test('default substring matching excludes /healthcare via /health', async () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, { register: registry });
