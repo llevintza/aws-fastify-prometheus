@@ -402,17 +402,9 @@ describe('Fastify Prometheus Plugin', () => {
       await fastify.register(fastifyPrometheusPlugin, {
         register: registry,
         enableDefaultMetrics: false,
+        routeMatch: 'substring',
         excludeRoutes: ['/ignored'],
-        unmatchedRouteLabel: '__unmatched__',
-        httpMetrics: {
-          requestCount: {
-            enabled: true,
-            name: 'http_requests_total',
-            help: 'Total number of HTTP requests',
-            labels: ['method', 'route', 'status_code'],
-          },
-          inFlight: { enabled: true },
-        },
+        httpMetrics: { inFlight: { enabled: true } },
       });
 
       const seen: Record<string, number> = {};
@@ -562,14 +554,15 @@ describe('Fastify Prometheus Plugin', () => {
 
   describe('prefix for Node.js default metrics and CloudWatch export names', () => {
     const awsCloudWatch = { region: 'us-east-1', namespace: 'Test/App' };
-    const httpMetrics = {
-      requestCount: {
-        enabled: true,
-        name: 'http_requests_total',
-        help: 'Total number of HTTP requests',
-        labels: ['method', 'route', 'status_code'],
-      },
+    // httpMetrics is deep-merged with the defaults (3.0), so turn off what these tests don't use
+    const noHttpMetrics = {
+      requestDuration: { enabled: false },
+      requestCount: { enabled: false },
+      responseSize: { enabled: false },
+      errorCount: { enabled: false },
+      successCount: { enabled: false },
     };
+    const httpMetrics = { ...noHttpMetrics, requestCount: { enabled: true } };
     const customMetrics: FastifyPrometheusOptions['customMetrics'] = [
       { type: 'counter', name: 'jobs_total', help: 'Jobs' },
       { type: 'gauge', name: 'queue_depth', help: 'Queue depth' },
@@ -586,7 +579,7 @@ describe('Fastify Prometheus Plugin', () => {
       await fastify.register(fastifyPrometheusPlugin, {
         register: registry,
         enableDefaultMetrics: true,
-        httpMetrics: {},
+        httpMetrics: noHttpMetrics,
         ...options,
       });
       await fastify.ready();
@@ -1035,9 +1028,28 @@ describe('Route matching and cardinality guard', () => {
       .filter(line => line.startsWith('http_requests_total{'))
       .map(line => /route="([^"]*)"/.exec(line)?.[1] ?? '');
 
-  test('uses raw URLs for unmatched requests by default', async () => {
+  test('collapses unmatched requests into __unmatched__ by default (3.0)', async () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, { register: registry });
+
+    await fastify.inject({ method: 'GET', url: '/nope/1' });
+    await fastify.inject({ method: 'GET', url: '/nope/2?x=1' });
+
+    const metricsText = await fastify.prometheus.getMetrics();
+    expect(routeLabels(metricsText)).toEqual(['__unmatched__']);
+    expect(metricsText).toContain(
+      'http_requests_total{method="GET",route="__unmatched__",status_code="404"} 2'
+    );
+
+    await fastify.close();
+  });
+
+  test('unmatchedRouteLabel: false restores raw URLs for unmatched requests', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      unmatchedRouteLabel: false,
+    });
 
     await fastify.inject({ method: 'GET', url: '/nope/1' });
     await fastify.inject({ method: 'GET', url: '/nope/2' });
@@ -1048,11 +1060,11 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
-  test('collapses unmatched requests into unmatchedRouteLabel', async () => {
+  test('collapses unmatched requests into a custom unmatchedRouteLabel', async () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, {
       register: registry,
-      unmatchedRouteLabel: '__unmatched__',
+      unmatchedRouteLabel: '__not_found__',
     });
     fastify.get('/users/:id', () => ({ ok: true }));
 
@@ -1064,9 +1076,9 @@ describe('Route matching and cardinality guard', () => {
     await fastify.inject({ method: 'GET', url: '/users/7' });
 
     const labels = routeLabels(await fastify.prometheus.getMetrics());
-    expect(new Set(labels)).toEqual(new Set(['__unmatched__', '/users/:id']));
+    expect(new Set(labels)).toEqual(new Set(['__not_found__', '/users/:id']));
     expect(await fastify.prometheus.getMetrics()).toContain(
-      'http_requests_total{method="GET",route="__unmatched__",status_code="404"} 4'
+      'http_requests_total{method="GET",route="__not_found__",status_code="404"} 4'
     );
 
     await fastify.close();
@@ -1077,7 +1089,6 @@ describe('Route matching and cardinality guard', () => {
     await fastify.register(fastifyPrometheusPlugin, {
       register: registry,
       includeRoutes: [/^\/api\//],
-      unmatchedRouteLabel: '__unmatched__',
     });
     fastify.get('/api/users', () => ({ ok: true }));
 
@@ -1096,16 +1107,17 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
-  test("routeMatch 'exact' ignores the query string on unmatched URLs", async () => {
+  test('default exact matching ignores the query string on unmatched URLs', async () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, {
       register: registry,
-      routeMatch: 'exact',
       excludeRoutes: ['/wp-login.php'],
+      unmatchedRouteLabel: false,
     });
 
+    // No '#fragment' case here: light-my-request drops fragments before the plugin sees the URL.
+    // Fragment stripping is covered by the matchesRoute unit tests in route-filter.test.ts.
     await fastify.inject({ method: 'GET', url: '/wp-login.php?redirect=1' });
-    await fastify.inject({ method: 'GET', url: '/wp-login.php#top' });
     await fastify.inject({ method: 'GET', url: '/wp-login.phpx?redirect=1' });
 
     expect(routeLabels(await fastify.prometheus.getMetrics())).toEqual([
@@ -1115,11 +1127,13 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
-  test('default substring mode still matches against the raw URL with its query string', async () => {
+  test("routeMatch 'substring' matches against the raw URL with its query string", async () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, {
       register: registry,
+      routeMatch: 'substring',
       excludeRoutes: ['?debug'],
+      unmatchedRouteLabel: false,
     });
 
     await fastify.inject({ method: 'GET', url: '/nope?debug=1' });
@@ -1134,8 +1148,8 @@ describe('Route matching and cardinality guard', () => {
     const fastify = Fastify();
     await fastify.register(fastifyPrometheusPlugin, {
       register: registry,
+      routeMatch: 'substring',
       excludeRoutes: ['unmatched'],
-      unmatchedRouteLabel: '__unmatched__',
     });
 
     await fastify.inject({ method: 'GET', url: '/api/missing' });
@@ -1147,9 +1161,12 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
-  test('default substring matching excludes /healthcare via /health', async () => {
+  test("routeMatch 'substring' restores the 2.x /health exclusion of /healthcare", async () => {
     const fastify = Fastify();
-    await fastify.register(fastifyPrometheusPlugin, { register: registry });
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      routeMatch: 'substring',
+    });
     fastify.get('/healthcare', () => ({ ok: true }));
 
     await fastify.inject({ method: 'GET', url: '/healthcare' });
@@ -1159,18 +1176,19 @@ describe('Route matching and cardinality guard', () => {
     await fastify.close();
   });
 
-  test("routeMatch 'exact' keeps /healthcare while excluding /health", async () => {
+  test('default excludeRoutes keep /healthcare while excluding /health and /healthcheck', async () => {
     const fastify = Fastify();
-    await fastify.register(fastifyPrometheusPlugin, { register: registry, routeMatch: 'exact' });
+    await fastify.register(fastifyPrometheusPlugin, { register: registry });
     fastify.get('/health', () => ({ ok: true }));
+    fastify.get('/healthcheck', () => ({ ok: true }));
     fastify.get('/healthcare', () => ({ ok: true }));
 
     await fastify.inject({ method: 'GET', url: '/health' });
+    await fastify.inject({ method: 'GET', url: '/health?probe=1' });
+    await fastify.inject({ method: 'GET', url: '/healthcheck' });
     await fastify.inject({ method: 'GET', url: '/healthcare' });
 
-    const labels = routeLabels(await fastify.prometheus.getMetrics());
-    expect(labels).toContain('/healthcare');
-    expect(labels).not.toContain('/health');
+    expect(routeLabels(await fastify.prometheus.getMetrics())).toEqual(['/healthcare']);
 
     await fastify.close();
   });
@@ -1213,6 +1231,93 @@ describe('Route matching and cardinality guard', () => {
     const labels = routeLabels(await fastify.prometheus.getMetrics());
     expect(labels).toContain('/loud');
     expect(labels).not.toContain('/quiet');
+
+    await fastify.close();
+  });
+});
+
+describe('httpMetrics deep merge (3.0)', () => {
+  let registry: Registry;
+
+  const DEFAULT_METRIC_NAMES = [
+    'http_errors_total',
+    'http_request_duration_ms',
+    'http_requests_total',
+    'http_response_size_bytes',
+    'http_success_total',
+  ];
+
+  beforeEach(() => {
+    registry = new Registry();
+  });
+
+  afterEach(() => {
+    registry.clear();
+  });
+
+  const metricNames = (): string[] =>
+    registry
+      .getMetricsAsArray()
+      .map(m => m.name)
+      .sort();
+
+  test('a partial httpMetrics keeps every default metric', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      enableDefaultMetrics: false,
+      httpMetrics: { inFlight: { enabled: true } },
+    });
+
+    expect(metricNames()).toEqual([...DEFAULT_METRIC_NAMES, 'http_requests_in_flight'].sort());
+
+    await fastify.close();
+  });
+
+  test('enabled: false drops a single default metric', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      enableDefaultMetrics: false,
+      httpMetrics: { responseSize: { enabled: false }, successCount: { enabled: false } },
+    });
+
+    expect(metricNames()).toEqual(
+      ['http_errors_total', 'http_request_duration_ms', 'http_requests_total'].sort()
+    );
+
+    await fastify.close();
+  });
+
+  test('a partial metric config keeps its default name, help and labels', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      enableDefaultMetrics: false,
+      httpMetrics: { requestDuration: { buckets: [7, 70] } },
+    });
+    fastify.get('/test', () => ({ ok: true }));
+    await fastify.inject({ method: 'GET', url: '/test' });
+
+    const metricsText = await fastify.prometheus.getMetrics();
+    expect(metricsText).toContain('# HELP http_request_duration_ms Duration of HTTP requests');
+    expect(metricsText).toContain(
+      'http_request_duration_ms_bucket{le="70",method="GET",route="/test",status_code="200"} 1'
+    );
+    expect(metricsText).not.toContain('le="5000"');
+
+    await fastify.close();
+  });
+
+  test('httpMetrics: {} keeps the defaults', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      enableDefaultMetrics: false,
+      httpMetrics: {},
+    });
+
+    expect(metricNames()).toEqual(DEFAULT_METRIC_NAMES);
 
     await fastify.close();
   });

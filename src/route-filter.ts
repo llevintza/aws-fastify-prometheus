@@ -22,7 +22,7 @@ function stripQueryAndFragment(route: string): string {
 export function matchesRoute(
   route: string,
   matcher: RouteMatcher,
-  mode: RouteMatchMode = 'substring'
+  mode: RouteMatchMode = 'exact'
 ): boolean {
   if (typeof matcher === 'string') {
     if (mode === 'exact') {
@@ -45,7 +45,7 @@ export function matchesRoute(
  * is non-empty and the route matches none of its entries.
  */
 export function shouldRecord(route: string, config: RouteFilterConfig): boolean {
-  const mode = config.routeMatch ?? 'substring';
+  const mode = config.routeMatch ?? 'exact';
 
   if (config.excludeRoutes?.some(matcher => matchesRoute(route, matcher, mode)) === true) {
     return false;
