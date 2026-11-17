@@ -274,17 +274,10 @@ The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`; it
 `onRequest` and down in `onResponse`, or in `onRequestAbort` when the client disconnects, so it
 can't leak. It honours `excludeRoutes` / `includeRoutes`.
 
-```typescript
-await fastify.register(fastifyPrometheusPlugin, {
-  httpMetrics: {
-    // name and help are optional (defaults: 'http_requests_in_flight' and a built-in help text)
-    inFlight: { enabled: true },
-  },
-});
-```
-
-Passing `httpMetrics` replaces the default HTTP metrics config as a whole, so list every metric
-you want to keep alongside `inFlight`.
+`inFlight` takes `enabled`, plus optional `name` (default `http_requests_in_flight`) and `help`.
+Because a partial `httpMetrics` replaces the defaults, see
+[Configuration Options](#configuration-options) for how to enable it and keep the default HTTP
+metrics.
 
 ## AWS CloudWatch Integration
 
@@ -324,6 +317,50 @@ await fastify.register(fastifyPrometheusPlugin, {
 
 `HttpMetricsConfig` accepts `requestDuration`, `requestCount`, `responseSize`, `errorCount`,
 `successCount` and `inFlight` (`InFlightConfig`: `enabled`, `name`, `help`; off by default).
+
+**A partial `httpMetrics` replaces the defaults.** Options are merged shallowly, so passing
+`httpMetrics` replaces the whole default HTTP metrics config: only the metrics you list are
+registered. To add `inFlight` and keep the default metrics, list each default metric next to it:
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  httpMetrics: {
+    requestDuration: {
+      enabled: true,
+      name: 'http_request_duration_ms',
+      help: 'Duration of HTTP requests in milliseconds',
+      buckets: [0.1, 5, 15, 50, 100, 200, 300, 400, 500, 1000, 2000, 5000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    requestCount: {
+      enabled: true,
+      name: 'http_requests_total',
+      help: 'Total number of HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    responseSize: {
+      enabled: true,
+      name: 'http_response_size_bytes',
+      help: 'Size of HTTP responses in bytes',
+      buckets: [1, 100, 1000, 10000, 100000, 1000000],
+      labels: ['method', 'route', 'status_code'],
+    },
+    errorCount: {
+      enabled: true,
+      name: 'http_errors_total',
+      help: 'Total number of HTTP errors',
+      labels: ['method', 'route', 'status_code'],
+    },
+    successCount: {
+      enabled: true,
+      name: 'http_success_total',
+      help: 'Total number of successful HTTP requests',
+      labels: ['method', 'route', 'status_code'],
+    },
+    inFlight: { enabled: true },
+  },
+});
+```
 
 ## TypeScript Support
 
