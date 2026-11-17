@@ -4,9 +4,19 @@
 
 import type { FastifyInstance, FastifyPluginAsync, FastifyRequest, FastifyReply } from 'fastify';
 import fp from 'fastify-plugin';
-import { register, collectDefaultMetrics, Counter, Gauge, Histogram, Summary } from 'prom-client';
+import {
+  register,
+  collectDefaultMetrics,
+  Counter,
+  Gauge,
+  Histogram,
+  Registry,
+  Summary,
+} from 'prom-client';
+import type { RegistryContentType } from 'prom-client';
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
+import { resolveExemplarExtractor } from './exemplars';
 import type {
   FastifyPrometheusOptions,
   HttpRequestMetrics,
@@ -14,6 +24,7 @@ import type {
   CustomMetricDefinition,
   HttpMetricsConfig,
   FastifyPrometheusContext,
+  ExemplarLabels,
 } from './types';
 
 /**
@@ -76,8 +87,21 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   const config = { ...DEFAULT_OPTIONS, ...options };
   const metricsRegistry = config.register ?? register;
 
+  // Validate exemplar options first so a misconfiguration fails before anything is registered
+  const exemplarExtractor = resolveExemplarExtractor(config);
+
+  // Must run before any metric is created: prom-client only allows exemplars on metrics whose
+  // registries are already OpenMetrics registries
+  if (config.openMetrics === true) {
+    (metricsRegistry as Registry<RegistryContentType>).setContentType(
+      Registry.OPENMETRICS_CONTENT_TYPE
+    );
+  }
+
   // Store metrics instances
   const metrics = new Map<string, Counter | Gauge | Histogram | Summary>();
+  // Names of metrics created with `enableExemplars` (they only accept the object call form)
+  const exemplarMetrics = new Set<string>();
   let awsExporter: AwsMetricsExporter | undefined;
 
   // Initialize AWS CloudWatch exporter if configured
@@ -99,7 +123,12 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
   // Initialize HTTP metrics
   if (config.httpMetrics) {
-    initializeHttpMetrics(config.httpMetrics, metrics, metricsRegistry);
+    initializeHttpMetrics(
+      config.httpMetrics,
+      metrics,
+      metricsRegistry,
+      exemplarExtractor !== undefined ? exemplarMetrics : undefined
+    );
   }
 
   // Initialize custom metrics
@@ -113,7 +142,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
       method: 'GET',
       url: config.endpoint,
       handler: async (_request: FastifyRequest, reply: FastifyReply) => {
-        void reply.type('text/plain');
+        void reply.type(metricsRegistry.contentType);
         return metricsRegistry.metrics();
       },
     });
@@ -176,7 +205,15 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     }
 
     if (config.httpMetrics) {
-      recordHttpMetrics(metricsData, config.httpMetrics, metrics, awsExporter);
+      const exemplarLabels = exemplarExtractor?.(request);
+      recordHttpMetrics(
+        metricsData,
+        config.httpMetrics,
+        metrics,
+        awsExporter,
+        exemplarMetrics,
+        exemplarLabels
+      );
     }
   });
 
@@ -193,11 +230,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     incrementCounter(name: string, labels?: MetricLabels, value = 1): void {
       const metric = metrics.get(name) as Counter;
       if (metric !== undefined) {
-        if (labels && Object.keys(labels).length > 0) {
-          metric.inc(labels, value);
-        } else {
-          metric.inc(value);
-        }
+        incrementCounterMetric(metric, exemplarMetrics.has(name), labels, value);
 
         if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
@@ -223,11 +256,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
     observeHistogram(name: string, value: number, labels?: MetricLabels): void {
       const metric = metrics.get(name) as Histogram;
       if (metric !== undefined) {
-        if (labels && Object.keys(labels).length > 0) {
-          metric.observe(labels, value);
-        } else {
-          metric.observe(value);
-        }
+        observeHistogramMetric(metric, exemplarMetrics.has(name), value, labels);
 
         if (awsExporter !== undefined) {
           awsExporter.exportMetric(name, value, labels);
@@ -252,7 +281,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 
     recordHttpRequest(httpMetrics: HttpRequestMetrics): void {
       if (config.httpMetrics) {
-        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter);
+        recordHttpMetrics(httpMetrics, config.httpMetrics, metrics, awsExporter, exemplarMetrics);
       }
     },
   };
@@ -278,8 +307,11 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
 function initializeHttpMetrics(
   config: HttpMetricsConfig,
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
-  registry: typeof register
+  registry: typeof register,
+  exemplarMetrics?: Set<string>
 ): void {
+  const enableExemplars = exemplarMetrics !== undefined;
+
   if (
     config.requestDuration?.enabled === true &&
     typeof config.requestDuration.name === 'string' &&
@@ -293,8 +325,12 @@ function initializeHttpMetrics(
       labelNames: config.requestDuration.labels ?? [],
       buckets: config.requestDuration.buckets ?? [0.1, 0.5, 1, 2, 5, 10],
       registers: [registry],
+      enableExemplars,
     });
     metrics.set(config.requestDuration.name, metric);
+    if (enableExemplars) {
+      exemplarMetrics.add(config.requestDuration.name);
+    }
   }
 
   if (
@@ -309,8 +345,12 @@ function initializeHttpMetrics(
       help: config.requestCount.help,
       labelNames: config.requestCount.labels ?? [],
       registers: [registry],
+      enableExemplars,
     });
     metrics.set(config.requestCount.name, metric);
+    if (enableExemplars) {
+      exemplarMetrics.add(config.requestCount.name);
+    }
   }
 
   if (
@@ -489,7 +529,9 @@ function recordHttpMetrics(
   requestMetrics: HttpRequestMetrics,
   config: HttpMetricsConfig,
   metrics: Map<string, Counter | Gauge | Histogram | Summary>,
-  awsExporter?: AwsMetricsExporter
+  awsExporter?: AwsMetricsExporter,
+  exemplarMetrics?: Set<string>,
+  exemplarLabels?: ExemplarLabels
 ): void {
   const isError = requestMetrics.statusCode >= 400;
   const isSuccess = requestMetrics.statusCode >= 200 && requestMetrics.statusCode < 400;
@@ -502,11 +544,13 @@ function recordHttpMetrics(
   ) {
     const metric = metrics.get(config.requestDuration.name) as Histogram;
     if (metric !== undefined) {
-      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
-        metric.observe(requestMetrics.labels, requestMetrics.duration);
-      } else {
-        metric.observe(requestMetrics.duration);
-      }
+      observeHistogramMetric(
+        metric,
+        exemplarMetrics?.has(config.requestDuration.name) === true,
+        requestMetrics.duration,
+        requestMetrics.labels,
+        exemplarLabels
+      );
     }
   }
 
@@ -518,11 +562,13 @@ function recordHttpMetrics(
   ) {
     const metric = metrics.get(config.requestCount.name) as Counter;
     if (metric !== undefined) {
-      if (requestMetrics.labels && Object.keys(requestMetrics.labels).length > 0) {
-        metric.inc(requestMetrics.labels);
-      } else {
-        metric.inc();
-      }
+      incrementCounterMetric(
+        metric,
+        exemplarMetrics?.has(config.requestCount.name) === true,
+        requestMetrics.labels,
+        1,
+        exemplarLabels
+      );
     }
   }
 
@@ -631,6 +677,54 @@ function recordHttpMetrics(
     ) {
       awsExporter.exportMetric(config.successCount.name, 1, requestMetrics.labels);
     }
+  }
+}
+
+/**
+ * Increment a counter. Exemplar-enabled counters only accept the object call form.
+ */
+function incrementCounterMetric(
+  metric: Counter,
+  withExemplars: boolean,
+  labels: MetricLabels | undefined,
+  value: number,
+  exemplarLabels?: ExemplarLabels
+): void {
+  const hasLabels = labels !== undefined && Object.keys(labels).length > 0;
+  if (withExemplars) {
+    metric.inc({
+      value,
+      ...(hasLabels ? { labels } : {}),
+      ...(exemplarLabels !== undefined ? { exemplarLabels } : {}),
+    });
+  } else if (hasLabels) {
+    metric.inc(labels, value);
+  } else {
+    metric.inc(value);
+  }
+}
+
+/**
+ * Observe a histogram value. Exemplar-enabled histograms only accept the object call form.
+ */
+function observeHistogramMetric(
+  metric: Histogram,
+  withExemplars: boolean,
+  value: number,
+  labels: MetricLabels | undefined,
+  exemplarLabels?: ExemplarLabels
+): void {
+  const hasLabels = labels !== undefined && Object.keys(labels).length > 0;
+  if (withExemplars) {
+    metric.observe({
+      value,
+      ...(hasLabels ? { labels } : {}),
+      ...(exemplarLabels !== undefined ? { exemplarLabels } : {}),
+    });
+  } else if (hasLabels) {
+    metric.observe(labels, value);
+  } else {
+    metric.observe(value);
   }
 }
 

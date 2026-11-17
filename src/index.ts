@@ -9,6 +9,7 @@ export { default as fastifyPrometheusPlugin } from './plugin';
 export { AwsMetricsExporter } from './aws-metrics-exporter';
 export { PrometheusMetrics } from './prometheus-metrics';
 export { MetricsCollector } from './metrics-collector';
+export { otelExemplarExtractor } from './exemplars';
 
 // Export all types
 export type {
@@ -26,6 +27,8 @@ export type {
   MetricExportData,
   HttpRequestMetrics,
   FastifyPrometheusContext,
+  ExemplarLabels,
+  ExemplarExtractor,
 } from './types';
 
 // Re-export the plugin as default for easy import

@@ -285,6 +285,61 @@ await fastify.register(fastifyPrometheusPlugin, {
 });
 ```
 
+## Tracing exemplars
+
+Exemplars link a metric sample to the trace that produced it, so a latency spike on a
+dashboard can be opened as an example trace. They are part of the
+[OpenMetrics](https://github.com/prometheus/OpenMetrics/blob/main/specification/OpenMetrics.md#exemplars)
+format, so `exemplars` requires `openMetrics: true`. Registering the plugin with `exemplars` but
+without `openMetrics` throws an error.
+
+```typescript
+import { Registry } from 'prom-client';
+
+await fastify.register(fastifyPrometheusPlugin, {
+  register: new Registry(), // dedicated registry, see the warning below
+  openMetrics: true,
+  exemplars: true,
+});
+```
+
+With `exemplars: true`, the `trace_id` and `span_id` of the active
+[OpenTelemetry](https://opentelemetry.io/docs/languages/js/) span are attached to the
+request-duration histogram (`http_request_duration_ms`) and the request counter
+(`http_requests_total`):
+
+```text
+http_requests_total{method="GET",route="/users",status_code="200"} 1 # {trace_id="0af7651916cd43dd8448eb211c80319c",span_id="b7ad6b7169203331"} 1 1731830400.000
+```
+
+`@opentelemetry/api` is an **optional** peer dependency. Install it (and set up the OpenTelemetry
+SDK) to get exemplars. If it isn't installed, or no span is active when the response is
+recorded, metrics are recorded without an exemplar. To supply exemplar labels yourself, pass a
+function instead of `true`. Return `undefined` to skip the exemplar for that request:
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  register: new Registry(),
+  openMetrics: true,
+  exemplars: request => {
+    const traceId = request.headers['x-trace-id'];
+    return typeof traceId === 'string' ? { trace_id: traceId } : undefined;
+  },
+});
+```
+
+The built-in extractor is exported as `otelExemplarExtractor` if you want to wrap it.
+
+> **Warning:** `openMetrics: true` changes the exposition format of the registry the plugin
+> uses. Without a `register` option that is prom-client's **shared global registry**, so every
+> other consumer of it (another `/metrics` route, `register.metrics()` calls, other libraries)
+> switches to OpenMetrics output too. Pass a dedicated `register: new Registry()` when you enable
+> OpenMetrics. With default options, `/metrics` stays in Prometheus text format 0.0.4.
+
+The `/metrics` response's `Content-Type` always comes from the registry
+(`text/plain; version=0.0.4; charset=utf-8` by default, or
+`application/openmetrics-text; version=1.0.0; charset=utf-8` with `openMetrics`).
+
 ## Configuration Options
 
 ### `FastifyPrometheusOptions`
@@ -300,6 +355,8 @@ await fastify.register(fastifyPrometheusPlugin, {
 | `excludeRoutes` | `string[]` | `['/health', '/healthcheck']` | Routes to exclude |
 | `includeRoutes` | `string[]` | `undefined` | Routes to include (if specified, only these routes are included) |
 | `defaultLabels` | `Record<string, string>` | `{}` | Default labels for all metrics |
+| `openMetrics` | `boolean` | `false` | Serve `/metrics` in OpenMetrics format (switches the registry's content type) |
+| `exemplars` | `boolean \| ExemplarExtractor` | `false` | Attach tracing exemplars to the request-duration histogram and request counter; requires `openMetrics: true` |
 
 ## TypeScript Support
 
