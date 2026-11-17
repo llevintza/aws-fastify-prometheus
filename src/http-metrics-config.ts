@@ -7,15 +7,19 @@ import type { HttpMetricsConfig } from './types';
 /**
  * Copy `base`, then overwrite it with every field of `overrides` that is not `undefined` or
  * `null` (JavaScript callers may pass `null` for "unset"). Arrays (`buckets`, `labels`) are
- * replaced, not concatenated. Neither input is mutated.
+ * replaced, not concatenated, and copied. Neither input is mutated or aliased.
  */
 function mergeDefined<T extends object>(base: T | undefined, overrides: T | undefined): T {
-  const merged = { ...base } as T;
-  if (overrides !== undefined && overrides !== null) {
-    for (const key of Object.keys(overrides) as (keyof T)[]) {
-      const value = overrides[key];
+  const merged = {} as T;
+  for (const source of [base, overrides]) {
+    if (source === undefined || source === null) {
+      continue;
+    }
+    for (const key of Object.keys(source) as (keyof T)[]) {
+      const value = source[key];
       if (value !== undefined && value !== null) {
-        merged[key] = value;
+        // Copy arrays so the merged config never aliases the defaults or the caller's options
+        merged[key] = (Array.isArray(value) ? [...(value as unknown[])] : value) as T[keyof T];
       }
     }
   }

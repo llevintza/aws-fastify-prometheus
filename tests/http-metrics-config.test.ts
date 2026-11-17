@@ -25,6 +25,8 @@ describe('mergeHttpMetrics', () => {
     expect(merged).toEqual(defaults);
     expect(merged).not.toBe(defaults);
     expect(merged.requestCount).not.toBe(defaults.requestCount);
+    expect(merged.requestDuration?.buckets).not.toBe(defaults.requestDuration?.buckets);
+    expect(merged.requestDuration?.labels).not.toBe(defaults.requestDuration?.labels);
     expect(mergeHttpMetrics(defaults, {})).toEqual(defaults);
   });
 
@@ -47,8 +49,10 @@ describe('mergeHttpMetrics', () => {
   });
 
   test('arrays replace the default rather than being concatenated', () => {
-    const merged = mergeHttpMetrics(defaults, { requestCount: { labels: ['route'] } });
+    const labels = ['route'];
+    const merged = mergeHttpMetrics(defaults, { requestCount: { labels } });
     expect(merged.requestCount?.labels).toEqual(['route']);
+    expect(merged.requestCount?.labels).not.toBe(labels);
   });
 
   test('enabled: false turns a default metric off', () => {
