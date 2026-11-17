@@ -8,6 +8,7 @@ import { register, collectDefaultMetrics, Counter, Gauge, Histogram, Summary } f
 
 import { AwsMetricsExporter } from './aws-metrics-exporter';
 import { elapsedMs, prefixMetricName } from './metric-utils';
+import { shouldRecord } from './route-filter';
 import type {
   FastifyPrometheusOptions,
   HttpRequestMetrics,
@@ -126,27 +127,10 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   // Requests that incremented the gauge; deleting on decrement prevents double-decrements
   const inFlightRequests = new WeakSet<FastifyRequest>();
 
-  const isRouteTracked = (route: string): boolean => {
-    // Skip excluded routes
-    if (
-      config.excludeRoutes &&
-      config.excludeRoutes.length > 0 &&
-      config.excludeRoutes.some(excludedRoute => route.includes(excludedRoute))
-    ) {
-      return false;
-    }
-
-    // Skip if only specific routes are included and this route is not included
-    if (
-      config.includeRoutes &&
-      config.includeRoutes.length > 0 &&
-      !config.includeRoutes.some(includedRoute => route.includes(includedRoute))
-    ) {
-      return false;
-    }
-
-    return true;
-  };
+  // Same filter as the HTTP metrics in onResponse: per-route opt-out, then include/exclude.
+  const isRouteRecorded = (request: FastifyRequest): boolean =>
+    request.routeOptions.config?.metrics !== false &&
+    shouldRecord(request.routeOptions.url ?? request.url, config);
 
   const decrementInFlight = (request: FastifyRequest): void => {
     if (inFlightGauge !== undefined && inFlightRequests.delete(request)) {
@@ -170,7 +154,7 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   void fastify.addHook('onRequest', async (request: FastifyRequest) => {
     request.startTime = process.hrtime.bigint();
 
-    if (inFlightGauge !== undefined && isRouteTracked(request.routeOptions.url ?? request.url)) {
+    if (inFlightGauge !== undefined && isRouteRecorded(request)) {
       inFlightGauge.inc({ method: request.method });
       inFlightRequests.add(request);
     }
@@ -198,11 +182,15 @@ const fastifyPrometheusPlugin: FastifyPluginAsync<FastifyPrometheusOptions> = as
   void fastify.addHook('onResponse', async (request: FastifyRequest, reply: FastifyReply) => {
     decrementInFlight(request);
 
-    const route = request.routeOptions.url ?? request.url;
-
-    if (!isRouteTracked(route)) {
+    if (!isRouteRecorded(request)) {
       return;
     }
+
+    // Decide record/skip on the matched pattern or the raw URL, then pick the emitted label.
+    const matchedRoute = request.routeOptions.url;
+    const route =
+      matchedRoute ??
+      (typeof config.unmatchedRouteLabel === 'string' ? config.unmatchedRouteLabel : request.url);
 
     const duration = typeof request.startTime === 'bigint' ? elapsedMs(request.startTime) : 0;
     const labels = {
@@ -731,6 +719,11 @@ declare module 'fastify' {
 
   interface FastifyInstance {
     prometheus: FastifyPrometheusContext;
+  }
+
+  interface FastifyContextConfig {
+    /** Set to `false` to skip HTTP metrics for this route */
+    metrics?: boolean;
   }
 }
 
