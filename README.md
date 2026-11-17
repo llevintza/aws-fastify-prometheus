@@ -265,6 +265,26 @@ The plugin automatically collects the following HTTP metrics:
 | `http_response_size_bytes` | Histogram | Response size in bytes | `method`, `route`, `status_code` |
 | `http_errors_total` | Counter | Total number of HTTP errors (4xx, 5xx) | `method`, `route`, `status_code` |
 | `http_success_total` | Counter | Total number of successful requests (2xx, 3xx) | `method`, `route`, `status_code` |
+| `http_requests_in_flight` | Gauge | Requests currently being processed (**opt-in**, see below) | `method` |
+
+Request durations are measured with `process.hrtime.bigint()` and recorded as fractional
+milliseconds, so sub-millisecond buckets such as `0.1` are meaningful.
+
+The in-flight gauge is off by default. Enable it with `httpMetrics.inFlight`; it goes up in
+`onRequest` and down in `onResponse`, or in `onRequestAbort` when the client disconnects, so it
+can't leak. It honours `excludeRoutes` / `includeRoutes`.
+
+```typescript
+await fastify.register(fastifyPrometheusPlugin, {
+  httpMetrics: {
+    // name and help are optional (defaults: 'http_requests_in_flight' and a built-in help text)
+    inFlight: { enabled: true },
+  },
+});
+```
+
+Passing `httpMetrics` replaces the default HTTP metrics config as a whole, so list every metric
+you want to keep alongside `inFlight`.
 
 ## AWS CloudWatch Integration
 
@@ -300,6 +320,10 @@ await fastify.register(fastifyPrometheusPlugin, {
 | `excludeRoutes` | `string[]` | `['/health', '/healthcheck']` | Routes to exclude |
 | `includeRoutes` | `string[]` | `undefined` | Routes to include (if specified, only these routes are included) |
 | `defaultLabels` | `Record<string, string>` | `{}` | Default labels for all metrics |
+| `prefix` | `string` | `undefined` | Prepended verbatim to HTTP and custom metric names (e.g. `'myapp_'` gives `myapp_http_requests_total`). Not applied to Node.js default metrics or CloudWatch export names; context methods such as `incrementCounter` still take the unprefixed name |
+
+`HttpMetricsConfig` accepts `requestDuration`, `requestCount`, `responseSize`, `errorCount`,
+`successCount` and `inFlight` (`InFlightConfig`: `enabled`, `name`, `help`; off by default).
 
 ## TypeScript Support
 
