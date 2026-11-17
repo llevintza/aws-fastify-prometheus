@@ -1,3 +1,9 @@
+## [2.4.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.3.0...v2.4.0) (2026-11-17)
+
+### Features
+
+* **metrics:** opt-in prefix for default metrics and cloudwatch export names ([8a6b9cb](https://github.com/llevintza/aws-fastify-prometheus/commit/8a6b9cb298534799f66120332971b540cdc038bc)), closes [#254](https://github.com/llevintza/aws-fastify-prometheus/issues/254)
+
 ## [2.3.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.2.0...v2.3.0) (2026-11-17)
 
 ### Features
