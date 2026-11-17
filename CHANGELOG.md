@@ -1,3 +1,74 @@
+## [2.0.1](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.0.0...v2.0.1) (2026-11-17)
+
+### Bug Fixes
+
+* **ci:** address PR review on pointers and security pins ([3caca81](https://github.com/llevintza/aws-fastify-prometheus/commit/3caca81173ef6812ccae4c7077e3519f001c285f))
+* **ci:** avoid github.token fallback and run Semgrep correctly ([199d4aa](https://github.com/llevintza/aws-fastify-prometheus/commit/199d4aaf00f1911822f8b07119572703f8268e7b))
+
+### Documentation
+
+* document plugin architecture and add agent tooling config ([e7aaff8](https://github.com/llevintza/aws-fastify-prometheus/commit/e7aaff865930edf6c8c157949a8ffc757cb8599a))
+
+### Dependencies
+
+* **deps:** merge main into security-critical bump, resolve yarn.lock ([fa75204](https://github.com/llevintza/aws-fastify-prometheus/commit/fa752047a1facf027a0520c7777e4e4129fef3ed))
+
+### Miscellaneous Chores
+
+* add agent instructions and shared memory wiring ([0b550d1](https://github.com/llevintza/aws-fastify-prometheus/commit/0b550d13bc7439289401946379cbaf0788e448fa))
+* **deps)(deps:** bump @babel/plugin-syntax-import-attributes from 7.27.1 to 7.29.7 ([25277c9](https://github.com/llevintza/aws-fastify-prometheus/commit/25277c97e7b14721e912d4049eead359b47b5a4e))
+* **deps)(deps:** bump @jridgewell/gen-mapping from 0.3.12 to 0.3.13 ([b924602](https://github.com/llevintza/aws-fastify-prometheus/commit/b9246024f9f6c38740fbe74c5dd7c69e7a2791a3))
+* **deps)(deps:** bump @jridgewell/gen-mapping from 0.3.12 to 0.3.13 ([f920945](https://github.com/llevintza/aws-fastify-prometheus/commit/f920945db676d033083236e6dfaddfec547da109))
+* **deps)(deps:** bump @jridgewell/gen-mapping from 0.3.12 to 0.3.13 ([5fdd918](https://github.com/llevintza/aws-fastify-prometheus/commit/5fdd9188574b16100462b67a5cbe69229ed3f37d))
+* **deps)(deps:** bump @jridgewell/resolve-uri from 3.1.2 to 3.1.3 ([da95f3e](https://github.com/llevintza/aws-fastify-prometheus/commit/da95f3ed720e8f62c1d41467a2f43786fa47b5ec))
+* **deps)(deps:** bump @jridgewell/resolve-uri from 3.1.2 to 3.1.3 ([1c31c6e](https://github.com/llevintza/aws-fastify-prometheus/commit/1c31c6ed3723dc2978e4bad02f7a6638b1babeae))
+* **deps)(deps:** bump @jridgewell/resolve-uri from 3.1.2 to 3.1.3 ([172bb83](https://github.com/llevintza/aws-fastify-prometheus/commit/172bb8302f43af5338074951d43b0952fe844f07))
+* **deps)(deps:** bump @opentelemetry/api from 1.9.0 to 1.10.0 ([c23246f](https://github.com/llevintza/aws-fastify-prometheus/commit/c23246f4a57d48c7d20cdf9f24cb87d9da2ace85))
+* **deps)(deps:** bump @opentelemetry/api from 1.9.0 to 1.10.0 ([37759f6](https://github.com/llevintza/aws-fastify-prometheus/commit/37759f6488a2e232f9f4cbe43bbdf827156090ee))
+* **deps)(deps:** bump @opentelemetry/api from 1.9.0 to 1.10.0 ([c46b9be](https://github.com/llevintza/aws-fastify-prometheus/commit/c46b9be2d86729778d9e5b9c7f80d2a8afa46257))
+* **deps)(deps:** bump @tybys/wasm-util from 0.10.0 to 0.10.5 ([ac90680](https://github.com/llevintza/aws-fastify-prometheus/commit/ac90680d68a1f42eef41dc95ca1bbf51a1fb0096))
+* **deps)(deps:** bump @tybys/wasm-util from 0.10.0 to 0.10.5 ([4102f34](https://github.com/llevintza/aws-fastify-prometheus/commit/4102f349629085c78e62ac069bc4754e26e509ad))
+* **deps)(deps:** bump @tybys/wasm-util from 0.10.0 to 0.10.5 ([217932f](https://github.com/llevintza/aws-fastify-prometheus/commit/217932fe45cfcbfcef4ae7b1360cf4f3c796fcc6))
+* **deps)(deps:** bump acorn from 8.15.0 to 8.19.0 ([504b424](https://github.com/llevintza/aws-fastify-prometheus/commit/504b424a3560a7618dcde3abca69bb6c3a4d6f21))
+* **deps)(deps:** bump acorn from 8.15.0 to 8.19.0 ([df0e654](https://github.com/llevintza/aws-fastify-prometheus/commit/df0e6548900b8389ce2437d028aa5a9f787b77ee))
+* **deps)(deps:** bump bowser from 2.11.0 to 2.15.0 ([f28e0bb](https://github.com/llevintza/aws-fastify-prometheus/commit/f28e0bbcc31aa27d5267ae15021cc478e2621b18))
+* **deps)(deps:** bump bowser from 2.11.0 to 2.15.0 ([cad4363](https://github.com/llevintza/aws-fastify-prometheus/commit/cad4363387e187ee21e61251a2f19c94c00cbe0d))
+* **deps)(deps:** bump bowser from 2.11.0 to 2.15.0 ([3cf72a1](https://github.com/llevintza/aws-fastify-prometheus/commit/3cf72a1ec51d69c43317074404aae705bfd9c486))
+* **deps)(deps:** bump eslint-import-resolver-node from 0.3.9 to 0.3.10 ([7716f08](https://github.com/llevintza/aws-fastify-prometheus/commit/7716f08e61f9bf7d9a4666c9a53ed6f2faf55b63))
+* **deps)(deps:** bump eslint-module-utils from 2.12.1 to 2.14.0 ([35acaed](https://github.com/llevintza/aws-fastify-prometheus/commit/35acaed9b4149dbcaedbdceb33c0086db7caebde))
+* **deps)(deps:** bump eslint-module-utils from 2.12.1 to 2.14.0 ([e9da7db](https://github.com/llevintza/aws-fastify-prometheus/commit/e9da7dbfe3f2a6017ca9e8b43267d0fae09cae11))
+* **deps)(deps:** bump eslint-module-utils from 2.12.1 to 2.14.0 ([a9ecaa3](https://github.com/llevintza/aws-fastify-prometheus/commit/a9ecaa33118930202fe6b509e173f9b7a54f96eb))
+* **deps)(deps:** bump fdir from 6.4.6 to 6.5.0 ([bab0a41](https://github.com/llevintza/aws-fastify-prometheus/commit/bab0a4156f17ea75491bc9d4a2641bb9bb2a7374))
+* **deps)(deps:** bump fdir from 6.4.6 to 6.5.0 ([d013381](https://github.com/llevintza/aws-fastify-prometheus/commit/d01338118de572ba4a6f17535a15b0b0bc380a79))
+* **deps)(deps:** bump get-tsconfig from 4.10.1 to 4.14.3 ([5ac0de9](https://github.com/llevintza/aws-fastify-prometheus/commit/5ac0de9b876c1414d2f87c80da6399b0a748c23c))
+* **deps)(deps:** bump issue-parser from 7.0.1 to 7.0.2 ([118c8b6](https://github.com/llevintza/aws-fastify-prometheus/commit/118c8b65bd144cbcdc4ea286d17f0bc2f1d2e849))
+* **deps)(deps:** bump issue-parser from 7.0.1 to 7.0.2 ([14bbab6](https://github.com/llevintza/aws-fastify-prometheus/commit/14bbab6afa8ea1a65a2f3f13418bebca89a41924))
+* **deps)(deps:** bump issue-parser from 7.0.1 to 7.0.2 ([8e86ed1](https://github.com/llevintza/aws-fastify-prometheus/commit/8e86ed1f0257f5672e03bac73583825391bbad0a))
+* **deps)(deps:** bump node-releases from 2.0.19 to 2.0.64 ([0198f8c](https://github.com/llevintza/aws-fastify-prometheus/commit/0198f8cfbbc14e67c476081ea89682294f40f00b))
+* **deps)(deps:** bump node-releases from 2.0.19 to 2.0.64 ([f2944ae](https://github.com/llevintza/aws-fastify-prometheus/commit/f2944ae61a7b915ea69c5d3fdad5b28b48232362))
+* **deps)(deps:** bump node-releases from 2.0.19 to 2.0.64 ([db0e542](https://github.com/llevintza/aws-fastify-prometheus/commit/db0e5420958372ac9568e078b399369ea32fed2f))
+* **deps)(deps:** bump secure-json-parse from 4.0.0 to 4.1.1 ([3cc22a4](https://github.com/llevintza/aws-fastify-prometheus/commit/3cc22a4b64281f97eaba8823c0cb89293038c36f))
+* **deps)(deps:** bump secure-json-parse from 4.0.0 to 4.1.1 ([9a5d618](https://github.com/llevintza/aws-fastify-prometheus/commit/9a5d618867f039c92b31784d309e039d27b5c060))
+* **deps)(deps:** bump secure-json-parse from 4.0.0 to 4.1.1 ([8eca2d6](https://github.com/llevintza/aws-fastify-prometheus/commit/8eca2d6995e4d11d465b01a1ed3d0c0d7c497096))
+* **deps)(deps:** bump super-regex from 1.0.0 to 1.1.0 ([d1a574d](https://github.com/llevintza/aws-fastify-prometheus/commit/d1a574de1ce0eacd7e7e38f185e7f2453efae373))
+* **deps)(deps:** bump the security-critical group with 40 updates ([9efb380](https://github.com/llevintza/aws-fastify-prometheus/commit/9efb38077a83dd79db11c5cf937b49b367827eeb))
+* **deps)(deps:** bump toad-cache from 3.7.0 to 3.7.4 ([75e82cd](https://github.com/llevintza/aws-fastify-prometheus/commit/75e82cdc091cf8cf2584945b0671527ae692ba96))
+* **deps)(deps:** bump toad-cache from 3.7.0 to 3.7.4 ([4c3d138](https://github.com/llevintza/aws-fastify-prometheus/commit/4c3d138cd45bfdb348b48ddedde97baf0bf5efcf))
+* **deps)(deps:** bump toad-cache from 3.7.0 to 3.7.4 ([b809437](https://github.com/llevintza/aws-fastify-prometheus/commit/b809437e4b9633aed76f780d47f02459ec0924be))
+* **deps)(deps:** bump tslib from 2.8.1 to 2.9.1 ([8583d5c](https://github.com/llevintza/aws-fastify-prometheus/commit/8583d5c687fb3d782a7a25bbe04a664ea3d8c7d6))
+* **deps)(deps:** bump tslib from 2.8.1 to 2.9.1 ([568e526](https://github.com/llevintza/aws-fastify-prometheus/commit/568e526f8d0699a21fe7bcb397302aa0a97d7846))
+* **deps)(deps:** bump tslib from 2.8.1 to 2.9.1 ([afecaa8](https://github.com/llevintza/aws-fastify-prometheus/commit/afecaa81d0eddf8061c1eefe587bcd1a821b0a2d))
+* **deps)(deps:** bump typed-array-byte-offset from 1.0.4 to 1.0.5 ([1be2ec5](https://github.com/llevintza/aws-fastify-prometheus/commit/1be2ec5474019a979460f5343010522be7b04546))
+* **deps)(deps:** bump typed-array-byte-offset from 1.0.4 to 1.0.5 ([5f601e0](https://github.com/llevintza/aws-fastify-prometheus/commit/5f601e0df2a210d6edd9e393dd755c40350c0417))
+* **deps)(deps:** bump typed-array-byte-offset from 1.0.4 to 1.0.5 ([3502c50](https://github.com/llevintza/aws-fastify-prometheus/commit/3502c5090f553769cbd58b71f264e5e2a292c4d7))
+* **deps)(deps:** bump which-typed-array from 1.1.19 to 1.1.24 ([c7ac93b](https://github.com/llevintza/aws-fastify-prometheus/commit/c7ac93be1de06c3014b66ebf8c27fa4c742bf8f9))
+* **deps)(deps:** bump which-typed-array from 1.1.19 to 1.1.24 ([4e22aa2](https://github.com/llevintza/aws-fastify-prometheus/commit/4e22aa246f5ce318e1f0de505bce1add36d783b6))
+
+### Continuous Integration
+
+* harden Dependabot docs sync and PR reporting ([60d4d77](https://github.com/llevintza/aws-fastify-prometheus/commit/60d4d77adf83c5d20a3e6edc9f70a84ff14974f2))
+* streamline PR checks and progressive-disclosure docs ([e73d775](https://github.com/llevintza/aws-fastify-prometheus/commit/e73d77594bc2ce4dc0831e38fe9ccbd1381733dd))
+
 ## [2.0.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v1.0.2...v2.0.0) (2026-11-16)
 
 ### ⚠ BREAKING CHANGES
