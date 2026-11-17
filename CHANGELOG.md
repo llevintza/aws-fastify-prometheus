@@ -1,3 +1,17 @@
+## [2.1.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.0.1...v2.1.0) (2026-11-17)
+
+### Features
+
+* **routes:** add opt-in route matching modes and cardinality guard ([09c98b8](https://github.com/llevintza/aws-fastify-prometheus/commit/09c98b89c91b298b1473d5ae9584f2a4385332c2)), closes [#245](https://github.com/llevintza/aws-fastify-prometheus/issues/245)
+
+### Bug Fixes
+
+* **routes:** filter on raw url before applying unmatched route label ([e36ed45](https://github.com/llevintza/aws-fastify-prometheus/commit/e36ed45a861b05ce1b0aabeb7452af2f168b1177))
+
+### Styles
+
+* **readme:** apply prettier formatting ([3aae23b](https://github.com/llevintza/aws-fastify-prometheus/commit/3aae23ba975d7d555281fdd74c378667619f4299))
+
 ## [2.0.1](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.0.0...v2.0.1) (2026-11-17)
 
 ### Bug Fixes
