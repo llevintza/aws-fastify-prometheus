@@ -1,3 +1,27 @@
+## [2.2.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.1.0...v2.2.0) (2026-11-17)
+
+### Features
+
+* **metrics:** add hrtime request timing, opt-in in-flight gauge and metric prefix ([a40a135](https://github.com/llevintza/aws-fastify-prometheus/commit/a40a135d44e6ff154e1f62972ce71343229e4bf2)), closes [#244](https://github.com/llevintza/aws-fastify-prometheus/issues/244)
+
+### Bug Fixes
+
+* **metrics:** tolerate fastify versions without the onRequestAbort hook ([a3c2344](https://github.com/llevintza/aws-fastify-prometheus/commit/a3c23444f52b3c4fa1ab40e921a0066e0a41f656))
+
+### Documentation
+
+* **readme:** document that a partial httpMetrics replaces the defaults ([000b1ec](https://github.com/llevintza/aws-fastify-prometheus/commit/000b1ec22a0d43a4252d94de07792354e092ee3a))
+* **readme:** note in-flight gauge scrape self-count and older fastify drift ([3272e96](https://github.com/llevintza/aws-fastify-prometheus/commit/3272e9683872d5dd634ec624ab21d296a5528e86))
+
+### Miscellaneous Chores
+
+* merge origin/main into feat/hrtime-inflight-prefix ([a30bfef](https://github.com/llevintza/aws-fastify-prometheus/commit/a30bfef95cf7439732d4d853b76eb84bb6974c54)), closes [#250](https://github.com/llevintza/aws-fastify-prometheus/issues/250)
+
+### Tests
+
+* **metrics:** assert onRequestAbort fallback warning and scope it to in-flight ([d0b05ad](https://github.com/llevintza/aws-fastify-prometheus/commit/d0b05ad5971b0708cbb085f4c17873dbe8668461))
+* **metrics:** pin in-flight gauge filtering on unmatched urls ([9dd3c83](https://github.com/llevintza/aws-fastify-prometheus/commit/9dd3c832b57835532110f2a823a8f14b36077f9c))
+
 ## [2.1.0](https://github.com/llevintza/aws-fastify-prometheus/compare/v2.0.1...v2.1.0) (2026-11-17)
 
 ### Features
