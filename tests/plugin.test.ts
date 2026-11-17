@@ -433,6 +433,31 @@ describe('Fastify Prometheus Plugin', () => {
       await fastify.close();
     });
 
+    test("ignores the query string on unmatched URLs in routeMatch 'exact'", async () => {
+      const fastify = Fastify();
+      await fastify.register(fastifyPrometheusPlugin, {
+        register: registry,
+        enableDefaultMetrics: false,
+        routeMatch: 'exact',
+        excludeRoutes: ['/ignored'],
+        httpMetrics: { inFlight: { enabled: true } },
+      });
+
+      const seen: Record<string, number> = {};
+      fastify.setNotFoundHandler(async (request, reply) => {
+        seen[request.url] = await gaugeValue();
+        return reply.code(404).send('not found');
+      });
+
+      await fastify.inject({ method: 'GET', url: '/ignored?probe=1' });
+      await fastify.inject({ method: 'GET', url: '/ignored/x?probe=1' });
+
+      expect(seen).toEqual({ '/ignored?probe=1': 0, '/ignored/x?probe=1': 1 });
+      expect(await gaugeValue()).toBe(0);
+
+      await fastify.close();
+    });
+
     test('returns to 0 after an aborted request without double-decrementing', async () => {
       const fastify = Fastify();
       await fastify.register(fastifyPrometheusPlugin, {
@@ -621,6 +646,57 @@ describe('Route matching and cardinality guard', () => {
     expect(new Set(routeLabels(metricsText))).toEqual(new Set(['__unmatched__', '/api/users']));
     expect(metricsText).toContain(
       'http_requests_total{method="GET",route="__unmatched__",status_code="404"} 2'
+    );
+
+    await fastify.close();
+  });
+
+  test("routeMatch 'exact' ignores the query string on unmatched URLs", async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      routeMatch: 'exact',
+      excludeRoutes: ['/wp-login.php'],
+    });
+
+    await fastify.inject({ method: 'GET', url: '/wp-login.php?redirect=1' });
+    await fastify.inject({ method: 'GET', url: '/wp-login.php#top' });
+    await fastify.inject({ method: 'GET', url: '/wp-login.phpx?redirect=1' });
+
+    expect(routeLabels(await fastify.prometheus.getMetrics())).toEqual([
+      '/wp-login.phpx?redirect=1',
+    ]);
+
+    await fastify.close();
+  });
+
+  test('default substring mode still matches against the raw URL with its query string', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      excludeRoutes: ['?debug'],
+    });
+
+    await fastify.inject({ method: 'GET', url: '/nope?debug=1' });
+    await fastify.inject({ method: 'GET', url: '/nope?x=1' });
+
+    expect(routeLabels(await fastify.prometheus.getMetrics())).toEqual(['/nope?x=1']);
+
+    await fastify.close();
+  });
+
+  test('a substring exclude does not match the unmatchedRouteLabel value', async () => {
+    const fastify = Fastify();
+    await fastify.register(fastifyPrometheusPlugin, {
+      register: registry,
+      excludeRoutes: ['unmatched'],
+      unmatchedRouteLabel: '__unmatched__',
+    });
+
+    await fastify.inject({ method: 'GET', url: '/api/missing' });
+
+    expect(await fastify.prometheus.getMetrics()).toContain(
+      'http_requests_total{method="GET",route="__unmatched__",status_code="404"} 1'
     );
 
     await fastify.close();
