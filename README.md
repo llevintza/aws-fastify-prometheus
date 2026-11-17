@@ -105,8 +105,9 @@ await fastify.register(fastifyPrometheusPlugin, {
   // Exclude routes from metrics collection
   excludeRoutes: ['/health', '/metrics'],
 
-  // Only include specific routes (optional)
-  includeRoutes: ['/api/*'],
+  // Only include specific routes (optional). Strings are substrings, not globs:
+  // use '/api' or a RegExp such as /^\/api\//
+  includeRoutes: [/^\/api\//],
 
   // Add default labels to all metrics
   defaultLabels: {
@@ -415,7 +416,9 @@ or, for requests that match no route, to the raw request URL.
 `RouteMatcher`:
 
 - a `string`, matched with `String.includes()` by default, or by equality with
-  `routeMatch: 'exact'`
+  `routeMatch: 'exact'`. Strings are not globs (`'/api/*'` matches nothing). In
+  exact mode an unmatched request's query string and fragment are ignored, so
+  `'/x'` matches `/x?y=1`; substring mode sees the raw URL, as before
 - a `RegExp`, tested against the route (`routeMatch` does not apply)
 - a function `(route: string) => boolean`. It runs on every response, so it
   should be cheap and must not throw (an error raised in it surfaces from the

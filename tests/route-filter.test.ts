@@ -17,6 +17,24 @@ describe('matchesRoute', () => {
     expect(matchesRoute('/healthcare', '/health', 'exact')).toBe(false);
   });
 
+  test('exact mode ignores the query string and fragment', () => {
+    expect(matchesRoute('/x?y=1', '/x', 'exact')).toBe(true);
+    expect(matchesRoute('/x#frag', '/x', 'exact')).toBe(true);
+    expect(matchesRoute('/x?y=1#frag', '/x', 'exact')).toBe(true);
+    expect(matchesRoute('/xy?y=1', '/x', 'exact')).toBe(false);
+    expect(matchesRoute('/x/?y=1', '/x', 'exact')).toBe(false);
+  });
+
+  test('exact mode still matches a matcher that includes the query string', () => {
+    expect(matchesRoute('/x?y=1', '/x?y=1', 'exact')).toBe(true);
+  });
+
+  test('substring mode and RegExp/function matchers see the raw URL', () => {
+    expect(matchesRoute('/x?debug=1', 'debug')).toBe(true);
+    expect(matchesRoute('/x?y=1', /\?y=1$/, 'exact')).toBe(true);
+    expect(matchesRoute('/x?y=1', (r: string) => r === '/x?y=1', 'exact')).toBe(true);
+  });
+
   test('RegExp matcher ignores mode', () => {
     expect(matchesRoute('/api/v1/users', /^\/api\//, 'exact')).toBe(true);
     expect(matchesRoute('/web/api/', /^\/api\//)).toBe(false);
@@ -78,6 +96,12 @@ describe('shouldRecord', () => {
     expect(shouldRecord('/api/x', { includeRoutes: [/^\/api\//] })).toBe(true);
     expect(shouldRecord('/web', { includeRoutes: [/^\/api\//] })).toBe(false);
     expect(shouldRecord('/v2', { includeRoutes: [(r: string) => r.startsWith('/v2')] })).toBe(true);
+  });
+
+  test('exact exclusion drops unmatched URLs with a query string', () => {
+    const config = { excludeRoutes: ['/health'], routeMatch: 'exact' as const };
+    expect(shouldRecord('/health?probe=1', config)).toBe(false);
+    expect(shouldRecord('/healthcare?probe=1', config)).toBe(true);
   });
 
   test('exclusion wins over inclusion', () => {
