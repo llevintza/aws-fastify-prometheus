@@ -84,6 +84,11 @@ it holds that PR out of the stack and comments why. To bring it back, merge it
 by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
 dispatch to see the plan and the held PRs before anything is pushed.
 
+When re-enabling the stack workflow after it was disabled, run one manual
+dispatch with `dry_run=false` and confirm in the log that the `gh stack link`
+step succeeded before relying on the event triggers. If linking fails, the run
+exits 3 with the bases already chained.
+
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
 and/or [`.github/WORKFLOWS_SUMMARY.md`](../.github/WORKFLOWS_SUMMARY.md) in the

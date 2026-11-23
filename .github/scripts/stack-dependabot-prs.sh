@@ -190,9 +190,11 @@ hold_reason() {
       else
         [ .[]
           | select(
+              # foreign-commit-gate:begin (CI fails if this differs from the other copy)
               ((.author.login // "") != "dependabot[bot]")
               or ((.committer.login // "")
                   | IN("web-flow", "github-actions[bot]", "dependabot[bot]") | not)
+              # foreign-commit-gate:end
             )
           | "\(.sha[0:7]) (author \(.author.login // "unknown"), committer \(.committer.login // "unknown"))"
         ]

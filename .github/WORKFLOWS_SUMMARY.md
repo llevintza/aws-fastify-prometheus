@@ -35,7 +35,9 @@ message metadata (the PR body has none).
 The stack script uses only REST (`gh api`), so its PAT needs no `read:org`. It
 holds out of the stack, and never rebases or force-pushes, any PR with a commit
 not authored by `dependabot[bot]` (same gate as auto-merge). It retargets each
-base before pushing and rolls the base back if the push fails.
+base before pushing and rolls the base back if the push fails. The two copies of
+that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
+(**Dependabot Docs Sync** job) fails if they differ.
 
 Retired (function folded elsewhere or replaced by Dependabot):
 
