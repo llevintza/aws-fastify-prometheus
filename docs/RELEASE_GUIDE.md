@@ -122,6 +122,18 @@ yarn semantic-release --dry-run
 This analyzes commits and reports the next version without publishing or pushing
 tags.
 
+semantic-release 26 needs Node `>=26.13.0` (`.node-version`), even for a dry
+run. Consumers still only need the `engines.node` floor in `package.json`. The
+`@semantic-release/github` plugin fails `verifyConditions` without a GitHub
+token. To check analysis only, without a token, override the plugin list:
+
+```bash
+yarn semantic-release --dry-run --no-ci --branches "$(git branch --show-current)" \
+  --plugins ./scripts/semantic-release-analyze-commits.js,@semantic-release/release-notes-generator
+```
+
+Look for `Contract analyzeCommits complete: …` in the output.
+
 ## Related docs
 
 - [Branching Strategy](BRANCHING_STRATEGY.md) — trunk-based flow aligned with
