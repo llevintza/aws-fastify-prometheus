@@ -8995,13 +8995,14 @@ __metadata:
   linkType: hard
 
 "own-keys@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "own-keys@npm:1.0.1"
+  version: 1.0.2
+  resolution: "own-keys@npm:1.0.2"
   dependencies:
-    get-intrinsic: "npm:^1.2.6"
+    call-bound: "npm:^1.0.4"
+    get-intrinsic: "npm:^1.3.0"
     object-keys: "npm:^1.1.1"
     safe-push-apply: "npm:^1.0.0"
-  checksum: 10c0/6dfeb3455bff92ec3f16a982d4e3e65676345f6902d9f5ded1d8265a6318d0200ce461956d6d1c70053c7fe9f9fe65e552faac03f8140d37ef0fdd108e67013a
+  checksum: 10c0/84b0d9959475231166c3d4b9abd1b8af8042911e2e5625761eed980d1a1e4381cf52b34d907cae21ee8766c79de943f3cd85eba636149dee5e64cceff3ccdb78
   languageName: node
   linkType: hard
 
