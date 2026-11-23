@@ -59,7 +59,7 @@ jobs:
         uses: trufflesecurity/trufflehog@v3.100.0
         with:
           path: ./
-          version: 3.99.9
+          version: 3.100.0
           extra_args: --only-verified
 
       - name: Setup Node/Yarn for weekly audit
