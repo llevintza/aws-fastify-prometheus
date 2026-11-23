@@ -80,16 +80,32 @@ counts, too); everything else waits for a human. Auto-merge is bound to the head
 SHA whose CI passed. Security-update groups are split by update type
 (patch+minor vs major), so a security major is held for review without holding
 security patches; patch-only security PRs at the stack bottom can auto-merge.
+All security updates (grouped, and single Dependabot security-update PRs) sit at
+the bottom of the stack, so they merge before version updates; a security major
+at the bottom waits for a human and blocks the PRs above it until merged.
 
 The stack workflow never rewrites a Dependabot PR that someone else pushed to:
 it holds that PR out of the stack and comments why. To bring it back, merge it
 by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
 dispatch to see the plan and the held PRs before anything is pushed.
 
+Stacked npm PRs get their `yarn.lock` normalized by the stack workflow after
+each rebase, folded into the Dependabot commit, so CI's immutable install passes
+on every layer. A PR held for a lockfile conflict or an empty update carries a
+conflict comment; once the PRs below it merge, comment `@dependabot recreate` on
+it. Such a PR keeps its old base; if that base branch was force-pushed in the
+same run, its diff shows the old parent commits (the run summary warns) until
+the next run restacks it or Dependabot recreates it. Before the first live run
+after a change to the stack script, dispatch with `dry_run=true` and check the
+plan's `normalize yarn.lock (amend)` and `HOLD` lines.
+
 When re-enabling the stack workflow after it was disabled, run one manual
-dispatch with `dry_run=false` and confirm in the log that the `gh stack link`
-step succeeded before relying on the event triggers. If linking fails, the run
-exits 3 with the bases already chained.
+dispatch with `dry_run=false` and confirm in the log that the native stack step
+(unstack / create / add, listed under "Native stack actions" in the summary)
+succeeded before relying on the event triggers. When the order changes, the
+workflow unstacks and relinks by itself; if linking still fails, the run exits 3
+with the bases already chained. Unstack the stack by hand
+(`gh stack unstack <stack-number>`) and dispatch again.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide

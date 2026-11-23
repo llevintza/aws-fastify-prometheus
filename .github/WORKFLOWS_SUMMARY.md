@@ -39,6 +39,30 @@ base before pushing and rolls the base back if the push fails. The two copies of
 that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
 (**Dependabot Docs Sync** job) fails if they differ.
 
+Native stacks go through the Stacks REST API (no gh extension). GitHub refuses a
+base change for a PR inside a native stack (HTTP 422), so the script unstacks
+any stack holding a planned PR unless its members are already the bottom of the
+planned chain and none of them changes base, then retargets, pushes and relinks
+(create, or `add` when the old stack is a prefix). A stack that already matches
+the plan, bases included, is left alone. Security updates sort to the bottom:
+the security groups plus any single security PR (`security-update`: Dependabot's
+security-update footer in the body; GHSA IDs are not matched because
+version-update changelogs cite them too).
+
+Rebasing npm branches merges `yarn.lock` as text, which can leave a lockfile
+that `yarn install --immutable` rejects (YN0028). After each npm rebase the
+script runs `yarn install --mode=update-lockfile` (scripts off, empty
+environment, trunk's Yarn and `.yarnrc.yml` only) and amends the Dependabot
+commit when `yarn.lock` changed (author and message kept byte for byte;
+committer `github-actions[bot]`, which the foreign-commit gate allows). A PR
+whose lockfile conflict or normalization fails, or whose update ends up empty,
+is held out with a conflict comment. The workflow sets up Node (`.nvmrc`) and
+Corepack without a dependency cache (`pull_request_target`).
+
+The stack workflow's concurrency group is on the job, not the workflow, so a
+skipped non-Dependabot `pull_request_target` run can no longer cancel a pending
+Dependabot run or dispatch; dry-run dispatches use a separate group.
+
 Dependabot scope: version updates cover **direct** dependencies only
 (transitives move with their direct parent). Dependabot alerts and security
 updates are enabled; security PRs land in `security-patch-minor` /

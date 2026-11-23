@@ -11,7 +11,33 @@
 #      marker comment and lose the `stacked` label.
 #   2. Plan, locally only. Rebase every eligible PR onto the planned result
 #      of the one below it, in a throwaway clone. Nothing is pushed and no PR
-#      is edited. The first rebase conflict cuts the plan there.
+#      is edited. The first rebase conflict cuts the plan there, except:
+#      npm_and_yarn branches get yarn.lock normalized. Git merges yarn.lock
+#      as text, which can leave duplicate descriptor entries that
+#      `yarn install --immutable` rejects (YN0028), failing CI on every PR
+#      above the bottom. After each npm rebase, `yarn install
+#      --mode=update-lockfile` rewrites yarn.lock and, if it changed, the
+#      Dependabot commit is amended (author and full message, including the
+#      updated-dependencies metadata, kept byte for byte via
+#      --cleanup=verbatim; committer github-actions[bot],
+#      which the foreign-commit gate allows). A conflict only in yarn.lock
+#      takes the lower branch's yarn.lock and lets Yarn re-resolve. If that
+#      or the normalization fails, or the update ends up empty on the new
+#      parent (a lockfile-only bump lost to the lower yarn.lock), the PR is
+#      held out (conflict comment) and the next PR stacks on the same parent.
+#      github_actions branches are rebased only.
+#      Safety (pull_request_target, untrusted PR content): Yarn runs only on
+#      Dependabot-authored branches that passed step 1 (the tip and every
+#      replayed commit must be ones step 1 verified, else the PR is held:
+#      no time-of-check / time-of-use gap), only when the PR
+#      changes nothing but package.json / yarn.lock (so .yarnrc.yml, .yarn/
+#      and plugins are the trunk's), every added or changed dependency value
+#      is a semver range / dist-tag or npm: alias (allowlist), and its
+#      packageManager equals the trunk's,
+#      with lifecycle scripts disabled, in update-lockfile mode (no link or
+#      build step), and with an empty environment (env -i: no GH_TOKEN). The
+#      token is never written to the clone: git gets it per command through
+#      an env-scoped extraheader.
 #   3. Apply, bottom → top, one PR at a time, in this order:
 #        a. Retarget the PR base to its new parent (REST PATCH).
 #        b. Force-push the rebased branch (--force-with-lease on the tip read
@@ -26,17 +52,37 @@
 #      push, and a failed push rolls the base back, so every PR is either
 #      fully restacked or untouched. PRs below the failure stay consistent
 #      (each was fully applied); PRs above it are not touched.
-#   4. Register the chain as a native GitHub stack with `gh stack link`.
+#      Native stacks: GitHub rejects a base change (HTTP 422 "part of a
+#      stack") for a PR that is in a native stack. Before step 3a, the script
+#      unstacks (REST POST stacks/<n>/unstack) every open stack that holds a
+#      planned PR unless its open members are exactly the bottom of the
+#      planned chain (equal to it or a prefix of it) AND none of them changes
+#      base. That covers a stacked PR whose base must change (even in a
+#      matching order, e.g. one still targeting a closed PR's branch) and a
+#      stack still holding a PR that left the chain (held, cut by a conflict). A matching stack is left alone, so an
+#      up-to-date stack costs no unstack and no retarget (only pushes when
+#      the trunk moved). An unstack failure stops before any retarget or push.
+#      With several stacks to dissolve, one already unstacked before a later
+#      unstack fails stays unstacked (PRs unchanged) until the next run relinks.
+#   4. Relink the chain as a native GitHub stack (REST Stacks API): no-op
+#      when the existing stack already equals the chain, `add` the missing
+#      top PRs when it is a prefix of the chain, otherwise create a new
+#      stack. If step 3 failed part-way, the applied prefix (each PR fully
+#      restacked) is relinked before exiting, so it is not left unstacked.
 #      Chained bases alone are NOT a stack in the GitHub UI. The `stacked`
 #      label is only added once this step succeeds.
 #
+# Merge order: GROUP_ORDER, bottom first. Security updates sit at the very
+# bottom so they merge first: the security groups, then any single security
+# PR (`security-update`: no known group, and its body carries the footer
+# Dependabot adds only to security-update PRs). Majors still
+# wait for a human (auto-merge only takes patch updates).
+#
 # GitHub API: every call is REST (`gh api`), so a classic PAT with only the
 # `repo` / `public_repo` scope works. `gh pr edit` is NOT used: it queries
-# org team fields over GraphQL and fails without `read:org`. `gh stack link`
-# (gh-stack v0.1.0) reads PR fields over GraphQL that need no `read:org`
-# and uses REST for the stack and base endpoints.
-#
-# Requires the gh-stack extension (`gh extension install github/gh-stack`).
+# org team fields over GraphQL and fails without `read:org`. The gh-stack
+# extension is not needed: the script calls the Stacks REST API itself
+# (list, unstack, create, add).
 #
 # Required env:
 #   GH_TOKEN  — classic PAT (repo / public_repo scope) that can push to
@@ -55,7 +101,8 @@
 #       failing PR was left or rolled back to its previous state
 #   2 — rebase conflict; conflicting PR commented, chain cut there
 #       (PRs below the conflict are still stacked and linked)
-#   3 — `gh stack link` failed; bases are chained but no native stack exists
+#   3 — native stack create/add failed; bases are chained but the PRs are
+#       not (all) in a native stack
 
 set -euo pipefail
 
@@ -81,13 +128,18 @@ fi
 export GH_TOKEN GH_REPO
 
 # Fixed merge order: bottom (index 0) → top. Unknown groups sort after these by PR number.
-# Security patch/minor groups sit at the bottom so fixes merge first (only the
-# stack bottom may auto-merge); security majors sit near the top for review.
+# Every security update sits at the bottom so fixes merge first: the grouped
+# security PRs, then single security PRs (`security-update`, set in main, not
+# a dependabot.yml group). Security majors are at the bottom too, so they are
+# reviewed first; auto-merge still holds them for a human.
 # detect_group prefers the longest match, so `actions-security-*` beats the
 # npm `security-*` names it contains.
 GROUP_ORDER=(
   security-patch-minor
   actions-security-patch-minor
+  security-update
+  security-major
+  actions-security-major
   github-actions-official
   security-actions
   dependency-actions
@@ -100,10 +152,7 @@ GROUP_ORDER=(
   aws-ecosystem
   fastify-ecosystem
   other-dependencies
-  transitive-misc
   security-critical
-  actions-security-major
-  security-major
   fastify-ecosystem-major
 )
 
@@ -116,17 +165,6 @@ group_rank() {
       return 0
     fi
   done
-  # Catch-all aliases for leftover npm groups
-  case "$group" in
-    other-dependencies|transitive-misc|transitive-catch-all|other-deps)
-      for i in "${!GROUP_ORDER[@]}"; do
-        if [[ "${GROUP_ORDER[$i]}" == "other-dependencies" ]]; then
-          echo "$i"
-          return 0
-        fi
-      done
-      ;;
-  esac
   echo "999"
 }
 
@@ -170,8 +208,14 @@ detect_group() {
 }
 
 list_dependabot_prs() {
-  # Fields: number|headRefName|baseRefName|title|labels(csv)|url
-  # REST reports the Dependabot author as `dependabot[bot]`.
+  # Fields: number|headRefName|baseRefName|title|labels(csv)|url|security(0/1)
+  # REST reports the Dependabot author as `dependabot[bot]`. security=1 when
+  # the body carries the footer Dependabot adds only to security-update PRs
+  # ("You can disable automated security fix PRs for this repo ..."). If
+  # GitHub rewords that footer, single security PRs silently fall back to
+  # rank 999 (order only; nothing breaks): update the test below.
+  # A GHSA match is NOT used: copied release notes and changelogs in version
+  # updates often cite GHSA IDs.
   gh api --paginate "repos/${GH_REPO}/pulls?state=open&per_page=100" --jq '
     .[]
     | select(.user.login == "dependabot[bot]")
@@ -181,23 +225,94 @@ list_dependabot_prs() {
         .base.ref,
         (.title | gsub("\\|"; "/")),
         ([.labels[].name] | join(",")),
-        .html_url
+        .html_url,
+        (if ((.body // "") | test("automated security fix PRs"; "i"))
+         then "1" else "0" end)
       ]
     | join("|")
   '
 }
 
-# Print why a PR must be held out of the stack, or nothing when every commit
-# is Dependabot's. Same author/committer rule as dependabot-auto-merge.yml.
-# Fails closed: an unreadable or truncated commit list is a hold.
+# --- native stacks (REST Stacks API) ---
+# PR_STACK[pr]=stack number, STACK_MEMBERS[stack]="open PRs bottom → top".
+declare -A PR_STACK=()
+declare -A STACK_MEMBERS=()
+
+load_stacks() {
+  local out line snum members p
+  PR_STACK=()
+  STACK_MEMBERS=()
+  if ! out=$(gh api --paginate "repos/${GH_REPO}/stacks?per_page=100" --jq '
+      .[] | select(.open)
+      | "\(.number)|\([.pull_requests[] | select(.state == "open" and .merged_at == null)
+                       | .number | tostring] | join(" "))"'); then
+    return 1
+  fi
+  while IFS='|' read -r snum members; do
+    [[ -z "$snum" || -z "$members" ]] && continue
+    STACK_MEMBERS[$snum]="$members"
+    for p in $members; do
+      PR_STACK[$p]="$snum"
+    done
+  done <<<"$out"
+}
+
+# Make STACK_PRS one native stack: no-op if it already is, extend a stack
+# that holds a prefix of it, else create one. Returns 1 on failure.
+link_stack() {
+  local -a want=("$@")
+  local bottom="${want[0]}" snum existing payload
+  local -a have delta
+  snum="${PR_STACK[$bottom]:-}"
+  if [[ -n "$snum" ]]; then
+    existing="${STACK_MEMBERS[$snum]}"
+    read -r -a have <<<"$existing"
+    if [[ "$existing" == "${want[*]}" ]]; then
+      echo "Native stack #$snum already matches (${#want[@]} PRs); no change."
+      STACK_ACTIONS+=("kept native stack #$snum as is")
+      return 0
+    fi
+    if [[ "${want[*]}" == "$existing "* ]]; then
+      delta=("${want[@]:${#have[@]}}")
+      payload=$(printf '{"pull_requests":[%s]}' "$(IFS=,; echo "${delta[*]}")")
+      if [[ "$DRY_RUN" == "true" ]]; then
+        echo "[dry-run] would add ${delta[*]} to native stack #$snum (REST POST stacks/$snum/add)"
+      elif ! gh api -X POST "repos/${GH_REPO}/stacks/${snum}/add" --input - <<<"$payload" >/dev/null; then
+        echo "ERROR: adding ${delta[*]} to native stack #$snum failed." >&2
+        return 1
+      fi
+      STACK_ACTIONS+=("add ${delta[*]} to native stack #$snum")
+      return 0
+    fi
+    echo "ERROR: #$bottom is in native stack #$snum (${existing}), which does not match the chain." >&2
+    return 1
+  fi
+  payload=$(printf '{"pull_requests":[%s]}' "$(IFS=,; echo "${want[*]}")")
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[dry-run] would create a native stack: ${want[*]} (REST POST stacks)"
+  elif ! snum=$(gh api -X POST "repos/${GH_REPO}/stacks" --input - --jq .number <<<"$payload"); then
+    echo "ERROR: creating the native stack ${want[*]} failed." >&2
+    return 1
+  else
+    echo "Created native stack #$snum."
+  fi
+  STACK_ACTIONS+=("create native stack: ${want[*]}")
+}
+
+# Print "<verified commit shas, oldest → tip>|<hold reason>"; the reason is
+# empty when every commit is Dependabot's. Same author/committer rule as
+# dependabot-auto-merge.yml. Fails closed: an unreadable or truncated commit
+# list is a hold. The plan step replays only these verified shas.
 hold_reason() {
   local pr_number="$1"
   local reason
+  # shellcheck disable=SC2016 # $commits / $reason are jq variables, not shell
   if ! reason=$(gh api "repos/${GH_REPO}/pulls/${pr_number}/commits?per_page=100" --jq '
-      if length >= 100 then
+      . as $commits
+      | (if length >= 100 then
         "commit list hit the 100-commit page limit; authorship cannot be verified"
       else
-        [ .[]
+        [ $commits[]
           | select(
               # foreign-commit-gate:begin (CI fails if this differs from the other copy)
               ((.author.login // "") != "dependabot[bot]")
@@ -208,9 +323,10 @@ hold_reason() {
           | "\(.sha[0:7]) (author \(.author.login // "unknown"), committer \(.committer.login // "unknown"))"
         ]
         | if length == 0 then "" else "\(length) non-Dependabot commit(s): \(join(", "))" end
-      end
+      end) as $reason
+      | "\([$commits[].sha] | join(" "))|\($reason)"
     '); then
-    reason="could not list the PR commits (API error); authorship cannot be verified"
+    reason="|could not list the PR commits (API error); authorship cannot be verified"
   fi
   printf '%s' "$reason"
 }
@@ -299,9 +415,10 @@ comment_hold() {
 ${HOLD_MARKER_BEGIN}
 ⏸️ **Held out of the Dependabot stack**
 
-This branch has commits that Dependabot did not author, or that someone other
-than Dependabot or the stack workflow committed, so the stack workflow will not
-rebase, force-push or retarget it:
+This branch has commits that Dependabot did not author, that someone other
+than Dependabot or the stack workflow committed, or that appeared after the
+authorship check, so the stack workflow will not rebase, force-push or
+retarget it:
 
 - ${reason}
 
@@ -315,6 +432,8 @@ EOF
     echo "[dry-run] would upsert hold comment on #$pr_number"
     return 0
   fi
+  # A conflict fixed by hand makes the PR held; drop the stale conflict note.
+  delete_marker_comment "$pr_number" "$CONFLICT_MARKER"
   upsert_marker_comment "$pr_number" "$HOLD_MARKER_BEGIN" "$body"
 }
 
@@ -345,6 +464,7 @@ comment_conflict() {
   local pr_number="$1"
   local onto_branch="$2"
   local detail="$3"
+  local outcome="${4:-Stack mutation stopped at this PR so later layers were not retargeted onto a broken base.}"
   local body
 
   body=$(cat <<EOF
@@ -359,7 +479,7 @@ ${detail}
 **Next steps**
 1. Resolve conflicts locally on this branch, or close/recreate the Dependabot PR.
 2. Re-run **Dependabot Stack** (\`workflow_dispatch\`) after the conflict is fixed.
-3. Stack mutation stopped at this PR so later layers were not retargeted onto a broken base.
+3. ${outcome}
 
 ${CONFLICT_MARKER}
 conflict onto: ${onto_branch}
@@ -370,7 +490,118 @@ EOF
     echo "[dry-run] would comment conflict on #$pr_number"
     return 0
   fi
-  gh api -X POST "repos/${GH_REPO}/issues/${pr_number}/comments" -f body="$body" >/dev/null
+  upsert_marker_comment "$pr_number" "$CONFLICT_MARKER" "$body"
+}
+
+# --- git auth and yarn.lock normalization (plan phase, local clone) ---
+
+# The token travels in an env-scoped http extraheader (GIT_CONFIG_*), never in
+# the clone URL or the clone's .git/config, so Yarn cannot read it from disk.
+GIT_AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+git_auth() {
+  GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+    GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${GIT_AUTH_B64}" \
+    git "$@"
+}
+
+# Yarn with an empty environment: no GH_TOKEN or other secrets, lifecycle
+# scripts off. Corepack picks the Yarn version from package.json, which
+# normalize_lockfile pins to the trunk's packageManager first.
+yarn_clean() {
+  env -i PATH="$PATH" HOME="$HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    YARN_ENABLE_SCRIPTS=0 YARN_ENABLE_TELEMETRY=0 YARN_ENABLE_PROGRESS_BARS=0 \
+    yarn "$@"
+}
+
+# Rebasing npm branches merges yarn.lock as text, which can leave duplicate
+# descriptor entries that `yarn install --immutable` rejects (YN0028). Rewrite
+# yarn.lock in canonical form on the working tree: sets LOCK_CHANGED=1 when it
+# changed. Returns 1 with LOCK_ERR when Yarn may not or could not run.
+# Trust gate before Yarn runs on Dependabot content: the PR may only change
+# package.json and yarn.lock (so .yarnrc.yml, .yarn/ and plugins are the
+# trunk's), and packageManager must equal the trunk's.
+normalize_lockfile() {
+  local parent_ref="$1" files pm_tree pm_base out
+  LOCK_CHANGED=0
+  LOCK_ERR=""
+  files=$(git diff --name-only "$parent_ref")
+  if grep -vxE 'package\.json|yarn\.lock' <<<"$files" | grep -q .; then
+    LOCK_ERR="the PR changes files other than package.json / yarn.lock; Yarn was not run"
+    return 1
+  fi
+  # Registry versions only (allowlist): every added or changed value in the
+  # dependency fields must be a semver range / dist-tag, or an npm: alias of
+  # one. git, GitHub shorthand, patch, portal, link, exec, file, path and URL
+  # descriptors can make Yarn pack, prepare or run code even with scripts off.
+  local bad
+  if ! bad=$(jq -r --argjson old "$(git show "${parent_ref}:package.json")" '
+      def ok: test("^[0-9A-Za-z.^~<>=*+| -]+$")
+        or test("^npm:(@[a-z0-9._~-]+/)?[a-z0-9._~-]+@[0-9A-Za-z.^~<>=*+| -]+$");
+      . as $new
+      | ["dependencies", "devDependencies", "peerDependencies",
+         "optionalDependencies", "resolutions"][] as $f
+      | ($new[$f] // {}) | to_entries[]
+      | select((($old[$f] // {})[.key]) != .value)
+      | select((.value | type) != "string" or (.value | ok | not))
+      | "\(.key)=\(.value)"' package.json); then
+    LOCK_ERR="could not read package.json dependency fields; Yarn was not run"
+    return 1
+  fi
+  if [[ -n "$bad" ]]; then
+    LOCK_ERR="package.json adds a non-registry descriptor ($(head -n 3 <<<"$bad" | tr '\n' ' ')); Yarn was not run"
+    return 1
+  fi
+  pm_tree=$(jq -r '.packageManager // ""' package.json)
+  pm_base=$(git show "origin/${BASE_BRANCH}:package.json" | jq -r '.packageManager // ""')
+  if [[ "$pm_tree" != "$pm_base" ]]; then
+    LOCK_ERR="packageManager ${pm_tree} differs from ${BASE_BRANCH} (${pm_base}); Yarn was not run"
+    return 1
+  fi
+  if ! out=$(yarn_clean install --mode=update-lockfile 2>&1); then
+    LOCK_ERR="yarn install --mode=update-lockfile failed: $(tail -n 5 <<<"$out")"
+    return 1
+  fi
+  if ! git diff --quiet -- yarn.lock; then
+    LOCK_CHANGED=1
+  fi
+}
+
+# A rebase stopped on conflicts: when only yarn.lock conflicts, take the lower
+# branch's yarn.lock (rebase "ours"), let Yarn re-resolve the PR's
+# package.json on top of it, and continue. Returns 1 with LOCK_ERR otherwise.
+resolve_lock_conflicts() {
+  local parent_ref="$1" rounds=0
+  while [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; do
+    rounds=$((rounds + 1))
+    if (( rounds > 20 )); then
+      LOCK_ERR="gave up after 20 conflicted commits"
+      return 1
+    fi
+    if [[ "$(git diff --name-only --diff-filter=U)" != "yarn.lock" ]]; then
+      LOCK_ERR="conflict outside yarn.lock: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+      return 1
+    fi
+    # Stage the lower branch's yarn.lock first, so the index is merged before
+    # Yarn runs (LOCK_CHANGED is not used on this path).
+    git checkout --ours -- yarn.lock
+    git add yarn.lock
+    normalize_lockfile "$parent_ref" || return 1
+    git add yarn.lock
+    # Commit the resolved state ourselves with the stopped commit's author and
+    # message, byte for byte: `rebase --continue` would apply the default
+    # cleanup (append a newline, strip lines starting with #). Nothing to
+    # commit means the update vanished on the new parent.
+    if ! git commit -q -C "$(cat .git/rebase-merge/stopped-sha)" --cleanup=verbatim >/dev/null 2>&1; then
+      LOCK_ERR="the update is empty on the new parent after re-resolving yarn.lock"
+      return 1
+    fi
+    if ! git rebase --continue >/dev/null 2>&1 \
+        && [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
+      LOCK_ERR="rebase could not continue after re-resolving yarn.lock"
+      return 1
+    fi
+  done
 }
 
 # --- main ---
@@ -391,9 +622,14 @@ fi
 # Build sortable records: rank-pr|pr|head|base|title|labels|url|group
 RECORDS=()
 for line in "${PR_LINES[@]}"; do
-  IFS='|' read -r num head base title labels url <<<"$line"
+  IFS='|' read -r num head base title labels url security <<<"$line"
   group=$(detect_group "$head" "$title" "$labels")
   rank=$(group_rank "$group")
+  # A single (ungrouped) security PR goes to the bottom with the groups.
+  if [[ "$rank" == "999" && "$security" == "1" ]]; then
+    group="security-update"
+    rank=$(group_rank "$group")
+  fi
   # Pad rank and PR number for lexical sort; unknown groups (999) then by PR asc.
   # The key must be ONE '|'-field: readers split records with IFS='|'.
   printf -v key "%03d-%06d" "$rank" "$num"
@@ -410,7 +646,9 @@ ELIGIBLE=()
 HELD_LINES=()
 for rec in "${SORTED[@]}"; do
   IFS='|' read -r _key num head base title labels url group <<<"$rec"
-  reason=$(hold_reason "$num")
+  hold_out=$(hold_reason "$num")
+  verified="${hold_out%%|*}"
+  reason="${hold_out#*|}"
   if [[ -n "$reason" ]]; then
     echo "  SKIP #$num ($group): held out of the stack; $reason"
     HELD_LINES+=("#${num} (${group}, base ${base}): ${reason}")
@@ -418,23 +656,18 @@ for rec in "${SORTED[@]}"; do
     remove_stacked_label "$num" "$labels"
   else
     echo "  ok   #$num ($group)"
-    ELIGIBLE+=("$rec")
+    ELIGIBLE+=("${rec}|${verified}")
   fi
 done
 
 echo ""
 echo "Planned stack (bottom → top):"
 for rec in "${ELIGIBLE[@]}"; do
-  IFS='|' read -r _key num head base title labels url group <<<"$rec"
+  IFS='|' read -r _key num head base title labels url group _verified <<<"$rec"
   echo "  #$num  group=${group}  head=${head}  current_base=${base}"
 done
 if [[ ${#ELIGIBLE[@]} -eq 0 ]]; then
   echo "  (none)"
-fi
-
-if [[ "$DRY_RUN" != "true" ]] && ! gh stack --help >/dev/null 2>&1; then
-  echo "ERROR: gh-stack extension not installed (gh extension install github/gh-stack)." >&2
-  exit 1
 fi
 
 # --- 2. plan (local only) ---
@@ -451,35 +684,77 @@ PLAN_GROUP=()
 CONFLICT_NUM=""
 CONFLICT_ONTO=""
 CONFLICT_LOG=""
+LOCK_HOLD_NUM=()
+LOCK_HOLD_ONTO=()
+LOCK_HOLD_LOG=()
+LOCK_HOLD_LABELS=()
+LOCK_HOLD_LINES=()
 
 if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
-  # Full clone (blobless clones break rebase content resolution). The token
-  # stays in the temp clone's config, which is removed on exit.
-  CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git"
-  git clone --quiet --no-tags "$CLONE_URL" "$WORK_DIR/repo"
+  # Full clone (blobless clones break rebase content resolution). No token
+  # in the URL or config: git_auth passes it per command.
+  git_auth clone --quiet --no-tags "https://github.com/${GH_REPO}.git" "$WORK_DIR/repo"
   cd "$WORK_DIR/repo"
-  git fetch --quiet origin "$BASE_BRANCH"
+  git_auth fetch --quiet origin "$BASE_BRANCH"
   git config user.name "github-actions[bot]"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+  # npm branches get yarn.lock normalized below; fail before any mutation if
+  # Yarn (Corepack, the trunk's packageManager) cannot run here.
+  if printf '%s\n' "${ELIGIBLE[@]}" | cut -d'|' -f3 | grep -q '^dependabot/npm_and_yarn/'; then
+    if ! yarn_version=$(yarn_clean --version 2>&1); then
+      echo "ERROR: Yarn is not available (Corepack + Node from .nvmrc): ${yarn_version}" >&2
+      exit 1
+    fi
+    echo "Yarn ${yarn_version} (scripts disabled) normalizes yarn.lock on npm branches."
+  fi
 
   echo ""
   echo "Planning rebases locally (nothing is pushed in this phase)..."
   PREV_BRANCH="$BASE_BRANCH"
   PREV_REF="origin/${BASE_BRANCH}"
   for rec in "${ELIGIBLE[@]}"; do
-    IFS='|' read -r _key num head base title labels url group <<<"$rec"
+    IFS='|' read -r _key num head base title labels url group verified <<<"$rec"
     # Fetch the head and its CURRENT base (pre-push tips: nothing is pushed
     # until step 3). Replaying only <current base>..<head> rebases exactly the
     # commits the hold check verified, so a PR that sat on a held branch can
     # never carry that branch's foreign commits onto its new parent.
-    if ! git fetch --quiet origin \
+    if ! git_auth fetch --quiet origin \
         "+refs/heads/${head}:refs/remotes/origin/${head}" \
         "+refs/heads/${base}:refs/remotes/origin/${base}"; then
       echo "ERROR: could not fetch ${head} or its base ${base} for #$num; nothing was mutated." >&2
       exit 1
     fi
     old_sha=$(git rev-parse "origin/${head}")
+
+    # Authorship TOCTOU guard: the tip must still be the one the hold check
+    # verified, and every commit the rebase replays (<base>..<tip>) must be one
+    # it verified. Otherwise hold the PR before any checkout, rebase or Yarn.
+    moved=""
+    if [[ "$old_sha" != "${verified##* }" ]]; then
+      moved="tip is ${old_sha:0:7}, the authorship check saw ${verified##* }"
+    else
+      for c in $(git rev-list "origin/${base}..${old_sha}"); do
+        if [[ " ${verified} " != *" ${c} "* ]]; then
+          moved="commit ${c:0:7} in ${base}..${head} was not in the checked list"
+          break
+        fi
+      done
+    fi
+    if [[ -n "$moved" ]]; then
+      reason="branch moved after the authorship check (${moved})"
+      echo "  SKIP #$num ($group): held out of the stack; $reason"
+      HELD_LINES+=("#${num} (${group}, base ${base}): ${reason}")
+      comment_hold "$num" "$reason"
+      remove_stacked_label "$num" "$labels"
+      continue
+    fi
     git checkout --quiet -B "stack-${num}" "$old_sha"
+    is_npm=0
+    if [[ "$head" == dependabot/npm_and_yarn/* ]]; then
+      is_npm=1
+    fi
+    lock_note=""
 
     rebase_log=""
     set +e
@@ -487,12 +762,67 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     rebase_rc=$?
     set -e
     if [[ $rebase_rc -ne 0 ]]; then
-      git rebase --abort 2>/dev/null || true
-      echo "  CONFLICT #$num onto ${PREV_BRANCH}; the stack is cut here"
-      CONFLICT_NUM="$num"
-      CONFLICT_ONTO="$PREV_BRANCH"
-      CONFLICT_LOG="$rebase_log"
-      break
+      if [[ $is_npm -eq 1 && "$(git diff --name-only --diff-filter=U)" == "yarn.lock" ]]; then
+        if resolve_lock_conflicts "$PREV_REF"; then
+          lock_note="yarn.lock conflict re-resolved; "
+        else
+          git rebase --abort 2>/dev/null || true
+          git reset -q --hard
+          echo "  HOLD #$num: yarn.lock conflict onto ${PREV_BRANCH} not resolvable (${LOCK_ERR}); next PR stacks on ${PREV_BRANCH}"
+          LOCK_HOLD_NUM+=("$num")
+          LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+          LOCK_HOLD_LOG+=("${LOCK_ERR}"$'\n\n'"${rebase_log}")
+          LOCK_HOLD_LABELS+=("$labels")
+          LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+          continue
+        fi
+      else
+        git rebase --abort 2>/dev/null || true
+        echo "  CONFLICT #$num onto ${PREV_BRANCH}; the stack is cut here"
+        CONFLICT_NUM="$num"
+        CONFLICT_ONTO="$PREV_BRANCH"
+        CONFLICT_LOG="$rebase_log"
+        break
+      fi
+    fi
+
+    # Normalize yarn.lock on npm branches and fold it into the Dependabot
+    # commit (amend keeps its author and full message, including the
+    # updated-dependencies metadata; the committer becomes github-actions[bot],
+    # which the foreign-commit gate allows). No extra commit.
+    if [[ $is_npm -eq 1 ]]; then
+      if ! normalize_lockfile "$PREV_REF"; then
+        git reset -q --hard
+        echo "  HOLD #$num: yarn.lock could not be normalized (${LOCK_ERR}); next PR stacks on ${PREV_BRANCH}"
+        LOCK_HOLD_NUM+=("$num")
+        LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+        LOCK_HOLD_LOG+=("$LOCK_ERR")
+        LOCK_HOLD_LABELS+=("$labels")
+        LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+        continue
+      fi
+      if [[ $LOCK_CHANGED -eq 1 ]]; then
+        git add yarn.lock
+        # --cleanup=verbatim keeps the message byte-identical (Dependabot
+        # messages end without a newline; the default cleanup would add one).
+        git commit --quiet --amend --no-edit --cleanup=verbatim
+        lock_note+="normalize yarn.lock (amend); "
+      fi
+      git reset -q --hard
+    fi
+
+    # Never push a PR whose update vanished on the new parent (for example a
+    # yarn.lock-only bump whose conflict was resolved with the lower lockfile).
+    if git diff --quiet "$PREV_REF" HEAD; then
+      git reset -q --hard
+      LOCK_ERR="the update is empty on ${PREV_BRANCH} (a lockfile-only change lost to the lower PR's yarn.lock); comment \`@dependabot recreate\` once the PRs below merge"
+      echo "  HOLD #$num: ${LOCK_ERR}"
+      LOCK_HOLD_NUM+=("$num")
+      LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+      LOCK_HOLD_LOG+=("$LOCK_ERR")
+      LOCK_HOLD_LABELS+=("$labels")
+      LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+      continue
     fi
 
     PLAN_NUM+=("$num")
@@ -503,7 +833,7 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     PLAN_GROUP+=("$group")
 
     new_sha=$(git rev-parse HEAD)
-    action=""
+    action="$lock_note"
     if [[ "$base" != "$PREV_BRANCH" ]]; then
       action+="retarget ${base} → ${PREV_BRANCH}; "
     fi
@@ -522,9 +852,75 @@ fi
 STACK_PRS=()
 CHAIN_LINES=()
 PUSHED_BRANCHES=()
+STACK_ACTIONS=()
 APPLY_FAILED=0
 
+if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
+  if ! load_stacks; then
+    echo "ERROR: could not list native stacks (REST GET stacks); nothing was mutated." >&2
+    exit 1
+  fi
+  # Keep a stack only when its open members are exactly the bottom of the
+  # planned chain (equal to it or a prefix of it) and none of them changes
+  # base: every member then already chains as planned and link_stack can keep
+  # or extend it. Unstack any other
+  # stack that holds a planned PR, because either one of its PRs must change
+  # base (GitHub answers HTTP 422 for a stacked PR) or it holds a PR that is
+  # no longer in the chain (held, cut by a conflict), which would make the
+  # relink fail on every run.
+  declare -A UNSTACK_WHY=()
+  for idx in "${!PLAN_NUM[@]}"; do
+    snum="${PR_STACK[${PLAN_NUM[$idx]}]:-}"
+    if [[ -z "$snum" || -n "${UNSTACK_WHY[$snum]:-}" ]]; then
+      continue
+    fi
+    members="${STACK_MEMBERS[$snum]}"
+    why=""
+    for m in $members; do
+      if [[ " ${PLAN_NUM[*]} " != *" $m "* ]]; then
+        why+="#$m is not in the chain; "
+      fi
+    done
+    for j in "${!PLAN_NUM[@]}"; do
+      if [[ "${PR_STACK[${PLAN_NUM[$j]}]:-}" == "$snum" \
+          && "${PLAN_OLD_BASE[$j]}" != "${PLAN_NEW_BASE[$j]}" ]]; then
+        why+="#${PLAN_NUM[$j]} changes base; "
+      fi
+    done
+    # A member that changes base gets HTTP 422 even when the order matches
+    # (e.g. one still targeting the branch of a closed PR), so it never keeps.
+    if [[ -z "$why" && "${PLAN_NUM[*]} " == "$members "* ]]; then
+      continue
+    fi
+    UNSTACK_WHY[$snum]="${why:-order differs from the chain; }"
+  done
+  echo ""
+  if [[ ${#UNSTACK_WHY[@]} -eq 0 ]]; then
+    echo "Native stacks: no unstack needed (existing stack already matches the chain bottom)."
+  fi
+  for snum in "${!UNSTACK_WHY[@]}"; do
+    why="${UNSTACK_WHY[$snum]%; }"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "[dry-run] would unstack native stack #$snum (${STACK_MEMBERS[$snum]}): ${why}"
+    elif gh api -X POST "repos/${GH_REPO}/stacks/${snum}/unstack" >/dev/null; then
+      echo "Unstacked native stack #$snum (${STACK_MEMBERS[$snum]}): ${why}"
+    else
+      echo "ERROR: unstack of native stack #$snum failed; nothing was retargeted or pushed." >&2
+      APPLY_FAILED=1
+      break
+    fi
+    STACK_ACTIONS+=("unstack native stack #$snum (${why})")
+    for p in ${STACK_MEMBERS[$snum]}; do
+      unset "PR_STACK[$p]"
+    done
+    unset "STACK_MEMBERS[$snum]"
+  done
+fi
+
 for idx in "${!PLAN_NUM[@]}"; do
+  if [[ $APPLY_FAILED -eq 1 ]]; then
+    break
+  fi
   num="${PLAN_NUM[$idx]}"
   head="${PLAN_HEAD[$idx]}"
   old_base="${PLAN_OLD_BASE[$idx]}"
@@ -556,7 +952,7 @@ for idx in "${!PLAN_NUM[@]}"; do
   if [[ "$new_sha" != "$old_sha" ]]; then
     if [[ "$DRY_RUN" == "true" ]]; then
       echo "[dry-run] would force-push ${head}: ${old_sha:0:7} → ${new_sha:0:7} (--force-with-lease)"
-    elif git push --quiet --force-with-lease="refs/heads/${head}:${old_sha}" origin \
+    elif git_auth push --quiet --force-with-lease="refs/heads/${head}:${old_sha}" origin \
         "stack-${num}:refs/heads/${head}"; then
       PUSHED_BRANCHES+=("$head")
       echo "Pushed ${head}: ${old_sha:0:7} → ${new_sha:0:7}"
@@ -580,9 +976,16 @@ for idx in "${!PLAN_NUM[@]}"; do
   if [[ "$DRY_RUN" != "true" ]]; then
     delete_marker_comment "$num" "$HOLD_MARKER_BEGIN"
     delete_marker_comment "$num" "$MISBASED_MARKER"
+    delete_marker_comment "$num" "$CONFLICT_MARKER"
   fi
   STACK_PRS+=("$num")
   CHAIN_LINES+=("${pos}. #${num} (${group}) → base \`${new_base}\`")
+done
+
+for idx in "${!LOCK_HOLD_NUM[@]}"; do
+  comment_conflict "${LOCK_HOLD_NUM[$idx]}" "${LOCK_HOLD_ONTO[$idx]}" "${LOCK_HOLD_LOG[$idx]}" \
+    "This PR is held out of the stack (yarn.lock conflict, normalization failure or empty update); the PRs above it were stacked without it."
+  remove_stacked_label "${LOCK_HOLD_NUM[$idx]}" "${LOCK_HOLD_LABELS[$idx]}"
 done
 
 if [[ -n "$CONFLICT_NUM" && $APPLY_FAILED -eq 0 ]]; then
@@ -599,9 +1002,17 @@ print_summary() {
   if [[ ${#CHAIN_LINES[@]} -gt 0 ]]; then
     printf '  %s\n' "${CHAIN_LINES[@]}"
   fi
+  echo "Native stack actions: ${#STACK_ACTIONS[@]}"
+  if [[ ${#STACK_ACTIONS[@]} -gt 0 ]]; then
+    printf '  %s\n' "${STACK_ACTIONS[@]}"
+  fi
   echo "Held out (non-Dependabot commits; not rebased, pushed or retargeted): ${#HELD_LINES[@]}"
   if [[ ${#HELD_LINES[@]} -gt 0 ]]; then
     printf '  SKIP %s\n' "${HELD_LINES[@]}"
+  fi
+  echo "Held out (yarn.lock conflict, normalization failure or empty update): ${#LOCK_HOLD_LINES[@]}"
+  if [[ ${#LOCK_HOLD_LINES[@]} -gt 0 ]]; then
+    printf '  SKIP %s\n' "${LOCK_HOLD_LINES[@]}"
   fi
   if [[ -n "$CONFLICT_NUM" ]]; then
     echo "Conflict: #$CONFLICT_NUM onto ${CONFLICT_ONTO}; PRs above it were not touched."
@@ -627,23 +1038,37 @@ print_summary() {
 }
 
 if [[ $APPLY_FAILED -eq 1 ]]; then
+  # Keep the fully applied prefix a native stack, so a part-way failure does
+  # not leave restacked PRs unlinked after an unstack.
+  if [[ ${#STACK_PRS[@]} -ge 2 ]]; then
+    echo ""
+    echo "Relinking the applied prefix: ${STACK_PRS[*]}"
+    if [[ "$DRY_RUN" != "true" ]] && ! load_stacks; then
+      echo "ERROR: could not re-list native stacks; the applied prefix is not relinked." >&2
+    else
+      link_stack "${STACK_PRS[@]}" || echo "ERROR: relinking the applied prefix failed." >&2
+    fi
+  fi
   print_summary
   exit 1
 fi
 
 # --- 4. native stack, labels, order comments ---
 
-# Register the chain as a native GitHub stack (bottom → top). Linking is
-# idempotent: an up-to-date stack is a no-op and an existing stack is extended.
+# Register the chain as a native GitHub stack (bottom → top). Idempotent: an
+# up-to-date stack is a no-op and a stack holding a prefix is extended.
 # A stack needs at least two PRs; a lone PR just stays based on the trunk.
 if [[ ${#STACK_PRS[@]} -ge 2 ]]; then
   echo ""
   echo "Linking native GitHub stack: ${STACK_PRS[*]}"
-  if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[dry-run] would run: gh stack link --base $BASE_BRANCH ${STACK_PRS[*]}"
-  elif ! gh stack link --base "$BASE_BRANCH" "${STACK_PRS[@]}" </dev/null; then
-    echo "ERROR: gh stack link failed. Bases are chained, but the PRs are NOT a native stack." >&2
-    echo "If the order changed against an existing stack, unstack it (gh stack unstack <stack-number>) and re-run this workflow." >&2
+  if [[ "$DRY_RUN" != "true" ]] && ! load_stacks; then
+    echo "ERROR: could not re-list native stacks before linking." >&2
+    print_summary
+    exit 3
+  fi
+  if ! link_stack "${STACK_PRS[@]}"; then
+    echo "ERROR: bases are chained, but the PRs are NOT (all) in one native stack." >&2
+    echo "Unstack the conflicting stack (REST POST stacks/<n>/unstack or gh stack unstack <n>) and re-run this workflow." >&2
     print_summary
     exit 3
   fi
