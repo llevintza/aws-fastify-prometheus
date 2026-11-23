@@ -362,7 +362,7 @@ EOF
     echo "[dry-run] would comment conflict on #$pr_number"
     return 0
   fi
-  gh api -X POST "repos/${GH_REPO}/issues/${pr_number}/comments" -f body="$body" >/dev/null
+  upsert_marker_comment "$pr_number" "$CONFLICT_MARKER" "$body"
 }
 
 # --- main ---
@@ -572,6 +572,7 @@ for idx in "${!PLAN_NUM[@]}"; do
   if [[ "$DRY_RUN" != "true" ]]; then
     delete_marker_comment "$num" "$HOLD_MARKER_BEGIN"
     delete_marker_comment "$num" "$MISBASED_MARKER"
+    delete_marker_comment "$num" "$CONFLICT_MARKER"
   fi
   STACK_PRS+=("$num")
   CHAIN_LINES+=("${pos}. #${num} (${group}) → base \`${new_base}\`")

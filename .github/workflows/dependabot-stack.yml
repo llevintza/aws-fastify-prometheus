@@ -73,8 +73,8 @@ jobs:
 
       - name: Stack / restack Dependabot PRs
         env:
-          # Prefer GH_TOKEN; fall back to XOON_NPM_PUBLISH_TOKEN when it has
-          # contents:write + pull-requests:write + push to dependabot/*.
+          # Prefer GH_TOKEN; fall back to XOON_NPM_PUBLISH_TOKEN when it is a
+          # classic PAT with repo (public_repo) scope that can push to dependabot/*.
           GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.XOON_NPM_PUBLISH_TOKEN }}
           GH_REPO: ${{ github.repository }}
           BASE_BRANCH: main
@@ -83,7 +83,7 @@ jobs:
           set -euo pipefail
           if [ -z "${GH_TOKEN:-}" ]; then
             echo "ERROR: Neither secrets.GH_TOKEN nor secrets.XOON_NPM_PUBLISH_TOKEN is set." >&2
-            echo "Need a PAT with contents:write, pull-requests:write, and push to dependabot/*." >&2
+            echo "Need a classic PAT with repo (public_repo) scope that can push to dependabot/*." >&2
             exit 1
           fi
           chmod +x .stack-src/.github/scripts/stack-dependabot-prs.sh

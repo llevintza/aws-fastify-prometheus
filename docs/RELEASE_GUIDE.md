@@ -87,7 +87,10 @@ dispatch to see the plan and the held PRs before anything is pushed.
 When re-enabling the stack workflow after it was disabled, run one manual
 dispatch with `dry_run=false` and confirm in the log that the `gh stack link`
 step succeeded before relying on the event triggers. If linking fails, the run
-exits 3 with the bases already chained.
+exits 3 with the bases already chained. A PR that is now held (for example one a
+person pushed to) can still sit in a native stack an earlier run linked; if
+`gh stack link` fails for that reason, run `gh stack unstack <stack-number>` and
+dispatch again.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
