@@ -307,6 +307,8 @@ EOF
     echo "[dry-run] would upsert hold comment on #$pr_number"
     return 0
   fi
+  # A conflict fixed by hand makes the PR held; drop the stale conflict note.
+  delete_marker_comment "$pr_number" "$CONFLICT_MARKER"
   upsert_marker_comment "$pr_number" "$HOLD_MARKER_BEGIN" "$body"
 }
 
