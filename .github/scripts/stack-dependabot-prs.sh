@@ -67,6 +67,7 @@ MARKER_END="<!-- /dependabot-stack-order -->"
 HOLD_MARKER_BEGIN="<!-- dependabot-stack-hold -->"
 HOLD_MARKER_END="<!-- /dependabot-stack-hold -->"
 CONFLICT_MARKER="<!-- dependabot-stack-conflict -->"
+MISBASED_MARKER="<!-- dependabot-stack-misbased -->"
 
 if [[ -z "${GH_TOKEN:-}" ]]; then
   echo "ERROR: GH_TOKEN is required (classic PAT, repo scope, push to dependabot/*)." >&2
@@ -309,6 +310,29 @@ EOF
   upsert_marker_comment "$pr_number" "$HOLD_MARKER_BEGIN" "$body"
 }
 
+# Push failed after the retarget AND the base rollback failed: the PR now
+# targets a parent its branch was never rebased onto, so its diff can show the
+# parent's commits. Make that visible on the PR, not only in the run log.
+comment_misbased() {
+  local pr_number="$1"
+  local current_base="$2"
+  local wanted_base="$3"
+  local body
+
+  body=$(cat <<EOF
+${MISBASED_MARKER}
+🚨 **Dependabot stack left this PR on the wrong base**
+
+The stack workflow retargeted this PR to \`${current_base}\`, the force-push of
+the rebased branch failed, and rolling the base back to \`${wanted_base}\` also
+failed. The diff may include another PR's commits. Set the base back to
+\`${wanted_base}\` by hand, then re-run **Dependabot Stack**.
+EOF
+)
+  upsert_marker_comment "$pr_number" "$MISBASED_MARKER" "$body" || \
+    echo "ERROR: could not comment on #$pr_number either." >&2
+}
+
 comment_conflict() {
   local pr_number="$1"
   local onto_branch="$2"
@@ -535,6 +559,7 @@ for idx in "${!PLAN_NUM[@]}"; do
           echo "Rolled #$num base back to ${old_base}." >&2
         else
           echo "ERROR: rollback of #$num base to ${old_base} FAILED; fix the base by hand." >&2
+          comment_misbased "$num" "$new_base" "$old_base"
         fi
       fi
       APPLY_FAILED=1
@@ -546,6 +571,7 @@ for idx in "${!PLAN_NUM[@]}"; do
 
   if [[ "$DRY_RUN" != "true" ]]; then
     delete_marker_comment "$num" "$HOLD_MARKER_BEGIN"
+    delete_marker_comment "$num" "$MISBASED_MARKER"
   fi
   STACK_PRS+=("$num")
   CHAIN_LINES+=("${pos}. #${num} (${group}) → base \`${new_base}\`")
