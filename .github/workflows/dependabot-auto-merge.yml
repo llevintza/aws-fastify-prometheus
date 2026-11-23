@@ -37,7 +37,7 @@ jobs:
           fi
 
           pr_json=$(gh pr list --head "$HEAD_BRANCH" --state open \
-            --json number,author,mergeable,baseRefName,title,body,url --jq '.[0] // empty')
+            --json number,author,mergeable,baseRefName,headRefOid,title,body,url --jq '.[0] // empty')
           if [ -z "$pr_json" ]; then
             echo "No open PR for branch $HEAD_BRANCH; skipping."
             exit 0
@@ -47,6 +47,7 @@ jobs:
           author=$(echo "$pr_json" | jq -r '.author.login')
           mergeable=$(echo "$pr_json" | jq -r '.mergeable')
           base_ref=$(echo "$pr_json" | jq -r '.baseRefName')
+          pr_head_sha=$(echo "$pr_json" | jq -r '.headRefOid')
           pr_title=$(echo "$pr_json" | jq -r '.title // ""')
           pr_body=$(echo "$pr_json" | jq -r '.body // ""')
 
@@ -61,6 +62,13 @@ jobs:
 
           echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
           echo "Base: $base_ref  Mergeable: $mergeable"
+
+          # The verdict below is for the SHA whose CI just turned green. If the
+          # branch moved since, that newer commit gets its own CI + run.
+          if [ "$pr_head_sha" != "$HEAD_SHA" ]; then
+            echo "PR #$pr_number head is $pr_head_sha, not the CI SHA $HEAD_SHA; skipping."
+            exit 0
+          fi
 
           # Stack gate: only the bottom stacked PR (base == main) may auto-merge.
           # Upper stacked PRs wait until restack retargets them onto main.
@@ -80,9 +88,16 @@ jobs:
           commit_messages=$(printf '%s\n' "$commits_json" | jq -r '.[].commit.message')
 
           # Safety: a Dependabot PR that a human or another bot pushed to is
-          # not judged by Dependabot's metadata alone.
-          foreign_commits=$(printf '%s\n' "$commits_json" | jq -r \
-            '[.[] | select((.author.login // "") != "dependabot[bot]")] | length')
+          # not judged by Dependabot's metadata alone. Author must be
+          # dependabot[bot]; committer must be web-flow (Dependabot's signed
+          # commits) or github-actions[bot] (stack-script restacks). A GitHub
+          # "Update branch" merge commit also counts as foreign and blocks.
+          foreign_commits=$(printf '%s\n' "$commits_json" | jq -r '
+            [.[] | select(
+              ((.author.login // "") != "dependabot[bot]")
+              or ((.committer.login // "")
+                  | IN("web-flow", "github-actions[bot]", "dependabot[bot]") | not)
+            )] | length')
           if [ "$foreign_commits" != "0" ]; then
             echo "PR #$pr_number has $foreign_commits non-Dependabot commit(s); skipping auto-merge."
             exit 0
@@ -174,8 +189,9 @@ jobs:
           fi
 
           # Repo disallows squash; use merge commit. No --subject (preserve Dependabot trailers).
+          # --match-head-commit: a push after this point cannot ride this auto-merge.
           # Keep --body short; never paste the full Dependabot PR body.
-          if ! gh pr merge "$pr_number" --merge --auto --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
+          if ! gh pr merge "$pr_number" --merge --auto --match-head-commit "$HEAD_SHA" --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
             echo "Auto-merge enable returned non-zero; checking PR state..."
             gh pr view "$pr_number" --json state,mergeable,mergeStateStatus,autoMergeRequest
             exit 1

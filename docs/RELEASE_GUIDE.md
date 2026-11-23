@@ -75,7 +75,9 @@ on `main`). After a merge, restack of the remaining chain is automated (stack
 workflow). Do not rebase upper Dependabot branches by hand unless the workflow
 reports a conflict. Auto-merge only takes the stack bottom, and only when every
 row in the `updated-dependencies` commit metadata is a patch (highest type wins)
-and no one else pushed to the branch; everything else waits for a human.
+and no one else pushed to the branch (a GitHub **Update branch** merge commit
+counts, too); everything else waits for a human. Auto-merge is bound to the
+head SHA whose CI passed.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
