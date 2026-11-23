@@ -127,13 +127,16 @@ detect_group() {
 
 list_dependabot_prs() {
   # Fields: number|headRefName|baseRefName|title|labels(csv)|url
+  # `gh pr list --json author` reports Dependabot as `app/dependabot` (GraphQL
+  # bot login), while REST/webhooks use `dependabot[bot]`. Accept every form,
+  # same as the author check in dependabot-auto-merge.yml.
   gh pr list \
     --repo "$GH_REPO" \
     --state open \
     --limit 100 \
     --json number,headRefName,baseRefName,title,labels,author,url \
     --jq '
-      [.[] | select(.author.login == "dependabot[bot]")]
+      [.[] | select(.author.login | IN("dependabot[bot]", "app/dependabot", "dependabot"))]
       | sort_by(.number)
       | .[]
       | [
@@ -232,14 +235,15 @@ if [[ ${#PR_LINES[@]} -eq 0 || -z "${PR_LINES[0]:-}" ]]; then
   exit 0
 fi
 
-# Build sortable records: rank|pr|head|base|title|labels|url|group
+# Build sortable records: rank-pr|pr|head|base|title|labels|url|group
 RECORDS=()
 for line in "${PR_LINES[@]}"; do
   IFS='|' read -r num head base title labels url <<<"$line"
   group=$(detect_group "$head" "$title" "$labels")
   rank=$(group_rank "$group")
-  # Pad rank and PR number for lexical sort; unknown groups (999) then by PR asc
-  printf -v key "%03d|%06d" "$rank" "$num"
+  # Pad rank and PR number for lexical sort; unknown groups (999) then by PR asc.
+  # The key must be ONE '|'-field: readers split records with IFS='|'.
+  printf -v key "%03d-%06d" "$rank" "$num"
   RECORDS+=("${key}|${num}|${head}|${base}|${title}|${labels}|${url}|${group}")
 done
 

@@ -5,7 +5,7 @@
 # Dependabot PR is closed (including merge → restack remaining), or manually.
 #
 # Required secret: GH_TOKEN
-#   Fine-grained or classic PAT with:
+#   Classic PAT (never fine-grained, never GITHUB_TOKEN — see AGENTS.md) with:
 #     - contents: write (clone + force-push dependabot/* branches with lease)
 #     - pull requests: write (edit base, labels, comments)
 #   Plain GITHUB_TOKEN cannot push to dependabot/* branches in most repos.
@@ -44,7 +44,10 @@ jobs:
   stack-dependabot-prs:
     name: Stack Dependabot PRs
     runs-on: ubuntu-latest
-    # Dependabot author on PR events; always run for manual dispatch
+    # Dependabot author on PR events; always run for manual dispatch.
+    # The webhook payload uses the REST login `dependabot[bot]`; only
+    # `gh pr list --json author` (GraphQL) reports `app/dependabot`, which the
+    # stack script handles.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.user.login == 'dependabot[bot]')

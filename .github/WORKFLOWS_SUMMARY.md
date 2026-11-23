@@ -27,7 +27,12 @@ Overview of CI/CD for this repo. Deep release/Dependabot rules:
 | CI/CD                 | `ci.yml`                    | PR + push to `main`           | Quality gates + semantic-release                   |
 | Security Analysis     | `security.yml`              | PR + push to `main` + weekly  | CodeQL, Semgrep, TruffleHog; weekly audit artifact |
 | Dependabot Stack      | `dependabot-stack.yml`      | Dependabot PR events + manual | Rebase/retarget/link stacked Dependabot PRs        |
-| Dependabot Auto-Merge | `dependabot-auto-merge.yml` | After CI success on a PR      | Auto-merge confident stack-bottom patches          |
+| Dependabot Auto-Merge | `dependabot-auto-merge.yml` | After CI success on a PR      | Auto-merge confident stack-bottom patches (\*)     |
+
+(\*) The update type is the highest `update-type` in the Dependabot commit
+message metadata (the PR body has none). The stack script matches the PR author
+as `app/dependabot`, `dependabot[bot]` or `dependabot`, since `gh pr list`
+reports the GraphQL form.
 
 Retired (function folded elsewhere or replaced by Dependabot):
 
