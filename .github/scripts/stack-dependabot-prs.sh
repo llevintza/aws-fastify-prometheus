@@ -11,7 +11,28 @@
 #      marker comment and lose the `stacked` label.
 #   2. Plan, locally only. Rebase every eligible PR onto the planned result
 #      of the one below it, in a throwaway clone. Nothing is pushed and no PR
-#      is edited. The first rebase conflict cuts the plan there.
+#      is edited. The first rebase conflict cuts the plan there, except:
+#      npm_and_yarn branches get yarn.lock normalized. Git merges yarn.lock
+#      as text, which can leave duplicate descriptor entries that
+#      `yarn install --immutable` rejects (YN0028), failing CI on every PR
+#      above the bottom. After each npm rebase, `yarn install
+#      --mode=update-lockfile` rewrites yarn.lock and, if it changed, the
+#      Dependabot commit is amended (author and full message, including the
+#      updated-dependencies metadata, kept; committer github-actions[bot],
+#      which the foreign-commit gate allows). A conflict only in yarn.lock
+#      takes the lower branch's yarn.lock and lets Yarn re-resolve. If that
+#      or the normalization fails, or the update ends up empty on the new
+#      parent (a lockfile-only bump lost to the lower yarn.lock), the PR is
+#      held out (conflict comment) and the next PR stacks on the same parent.
+#      github_actions branches are rebased only.
+#      Safety (pull_request_target, untrusted PR content): Yarn runs only on
+#      Dependabot-authored branches that passed step 1, only when the PR
+#      changes nothing but package.json / yarn.lock (so .yarnrc.yml, .yarn/
+#      and plugins are the trunk's) and its packageManager equals the trunk's,
+#      with lifecycle scripts disabled, in update-lockfile mode (no link or
+#      build step), and with an empty environment (env -i: no GH_TOKEN). The
+#      token is never written to the clone: git gets it per command through
+#      an env-scoped extraheader.
 #   3. Apply, bottom → top, one PR at a time, in this order:
 #        a. Retarget the PR base to its new parent (REST PATCH).
 #        b. Force-push the rebased branch (--force-with-lease on the tip read
@@ -432,6 +453,7 @@ comment_conflict() {
   local pr_number="$1"
   local onto_branch="$2"
   local detail="$3"
+  local outcome="${4:-Stack mutation stopped at this PR so later layers were not retargeted onto a broken base.}"
   local body
 
   body=$(cat <<EOF
@@ -446,7 +468,7 @@ ${detail}
 **Next steps**
 1. Resolve conflicts locally on this branch, or close/recreate the Dependabot PR.
 2. Re-run **Dependabot Stack** (\`workflow_dispatch\`) after the conflict is fixed.
-3. Stack mutation stopped at this PR so later layers were not retargeted onto a broken base.
+3. ${outcome}
 
 ${CONFLICT_MARKER}
 conflict onto: ${onto_branch}
@@ -458,6 +480,84 @@ EOF
     return 0
   fi
   upsert_marker_comment "$pr_number" "$CONFLICT_MARKER" "$body"
+}
+
+# --- git auth and yarn.lock normalization (plan phase, local clone) ---
+
+# The token travels in an env-scoped http extraheader (GIT_CONFIG_*), never in
+# the clone URL or the clone's .git/config, so Yarn cannot read it from disk.
+GIT_AUTH_B64=$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 | tr -d '\n')
+git_auth() {
+  GIT_CONFIG_COUNT=1 \
+    GIT_CONFIG_KEY_0="http.https://github.com/.extraheader" \
+    GIT_CONFIG_VALUE_0="AUTHORIZATION: basic ${GIT_AUTH_B64}" \
+    git "$@"
+}
+
+# Yarn with an empty environment: no GH_TOKEN or other secrets, lifecycle
+# scripts off. Corepack picks the Yarn version from package.json, which
+# normalize_lockfile pins to the trunk's packageManager first.
+yarn_clean() {
+  env -i PATH="$PATH" HOME="$HOME" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    YARN_ENABLE_SCRIPTS=0 YARN_ENABLE_TELEMETRY=0 YARN_ENABLE_PROGRESS_BARS=0 \
+    yarn "$@"
+}
+
+# Rebasing npm branches merges yarn.lock as text, which can leave duplicate
+# descriptor entries that `yarn install --immutable` rejects (YN0028). Rewrite
+# yarn.lock in canonical form on the working tree: sets LOCK_CHANGED=1 when it
+# changed. Returns 1 with LOCK_ERR when Yarn may not or could not run.
+# Trust gate before Yarn runs on Dependabot content: the PR may only change
+# package.json and yarn.lock (so .yarnrc.yml, .yarn/ and plugins are the
+# trunk's), and packageManager must equal the trunk's.
+normalize_lockfile() {
+  local parent_ref="$1" files pm_tree pm_base out
+  LOCK_CHANGED=0
+  LOCK_ERR=""
+  files=$(git diff --name-only "$parent_ref")
+  if grep -vxE 'package\.json|yarn\.lock' <<<"$files" | grep -q .; then
+    LOCK_ERR="the PR changes files other than package.json / yarn.lock; Yarn was not run"
+    return 1
+  fi
+  pm_tree=$(jq -r '.packageManager // ""' package.json)
+  pm_base=$(git show "origin/${BASE_BRANCH}:package.json" | jq -r '.packageManager // ""')
+  if [[ "$pm_tree" != "$pm_base" ]]; then
+    LOCK_ERR="packageManager ${pm_tree} differs from ${BASE_BRANCH} (${pm_base}); Yarn was not run"
+    return 1
+  fi
+  if ! out=$(yarn_clean install --mode=update-lockfile 2>&1); then
+    LOCK_ERR="yarn install --mode=update-lockfile failed: $(tail -n 5 <<<"$out")"
+    return 1
+  fi
+  if ! git diff --quiet -- yarn.lock; then
+    LOCK_CHANGED=1
+  fi
+}
+
+# A rebase stopped on conflicts: when only yarn.lock conflicts, take the lower
+# branch's yarn.lock (rebase "ours"), let Yarn re-resolve the PR's
+# package.json on top of it, and continue. Returns 1 with LOCK_ERR otherwise.
+resolve_lock_conflicts() {
+  local parent_ref="$1" rounds=0
+  while [[ -d .git/rebase-merge || -d .git/rebase-apply ]]; do
+    rounds=$((rounds + 1))
+    if (( rounds > 20 )); then
+      LOCK_ERR="gave up after 20 conflicted commits"
+      return 1
+    fi
+    if [[ "$(git diff --name-only --diff-filter=U)" != "yarn.lock" ]]; then
+      LOCK_ERR="conflict outside yarn.lock: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
+      return 1
+    fi
+    git checkout --ours -- yarn.lock
+    normalize_lockfile "$parent_ref" || return 1
+    git add yarn.lock
+    if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 \
+        && [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
+      LOCK_ERR="rebase could not continue after re-resolving yarn.lock (the update may be empty on the new parent)"
+      return 1
+    fi
+  done
 }
 
 # --- main ---
@@ -538,16 +638,30 @@ PLAN_GROUP=()
 CONFLICT_NUM=""
 CONFLICT_ONTO=""
 CONFLICT_LOG=""
+LOCK_HOLD_NUM=()
+LOCK_HOLD_ONTO=()
+LOCK_HOLD_LOG=()
+LOCK_HOLD_LABELS=()
+LOCK_HOLD_LINES=()
 
 if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
-  # Full clone (blobless clones break rebase content resolution). The token
-  # stays in the temp clone's config, which is removed on exit.
-  CLONE_URL="https://x-access-token:${GH_TOKEN}@github.com/${GH_REPO}.git"
-  git clone --quiet --no-tags "$CLONE_URL" "$WORK_DIR/repo"
+  # Full clone (blobless clones break rebase content resolution). No token
+  # in the URL or config: git_auth passes it per command.
+  git_auth clone --quiet --no-tags "https://github.com/${GH_REPO}.git" "$WORK_DIR/repo"
   cd "$WORK_DIR/repo"
-  git fetch --quiet origin "$BASE_BRANCH"
+  git_auth fetch --quiet origin "$BASE_BRANCH"
   git config user.name "github-actions[bot]"
   git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+  # npm branches get yarn.lock normalized below; fail before any mutation if
+  # Yarn (Corepack, the trunk's packageManager) cannot run here.
+  if printf '%s\n' "${ELIGIBLE[@]}" | cut -d'|' -f3 | grep -q '^dependabot/npm_and_yarn/'; then
+    if ! yarn_version=$(yarn_clean --version 2>&1); then
+      echo "ERROR: Yarn is not available (Corepack + Node from .nvmrc): ${yarn_version}" >&2
+      exit 1
+    fi
+    echo "Yarn ${yarn_version} (scripts disabled) normalizes yarn.lock on npm branches."
+  fi
 
   echo ""
   echo "Planning rebases locally (nothing is pushed in this phase)..."
@@ -559,7 +673,7 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     # until step 3). Replaying only <current base>..<head> rebases exactly the
     # commits the hold check verified, so a PR that sat on a held branch can
     # never carry that branch's foreign commits onto its new parent.
-    if ! git fetch --quiet origin \
+    if ! git_auth fetch --quiet origin \
         "+refs/heads/${head}:refs/remotes/origin/${head}" \
         "+refs/heads/${base}:refs/remotes/origin/${base}"; then
       echo "ERROR: could not fetch ${head} or its base ${base} for #$num; nothing was mutated." >&2
@@ -567,6 +681,11 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     fi
     old_sha=$(git rev-parse "origin/${head}")
     git checkout --quiet -B "stack-${num}" "$old_sha"
+    is_npm=0
+    if [[ "$head" == dependabot/npm_and_yarn/* ]]; then
+      is_npm=1
+    fi
+    lock_note=""
 
     rebase_log=""
     set +e
@@ -574,12 +693,65 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     rebase_rc=$?
     set -e
     if [[ $rebase_rc -ne 0 ]]; then
-      git rebase --abort 2>/dev/null || true
-      echo "  CONFLICT #$num onto ${PREV_BRANCH}; the stack is cut here"
-      CONFLICT_NUM="$num"
-      CONFLICT_ONTO="$PREV_BRANCH"
-      CONFLICT_LOG="$rebase_log"
-      break
+      if [[ $is_npm -eq 1 && "$(git diff --name-only --diff-filter=U)" == "yarn.lock" ]]; then
+        if resolve_lock_conflicts "$PREV_REF"; then
+          lock_note="yarn.lock conflict re-resolved; "
+        else
+          git rebase --abort 2>/dev/null || true
+          git reset -q --hard
+          echo "  HOLD #$num: yarn.lock conflict onto ${PREV_BRANCH} not resolvable (${LOCK_ERR}); next PR stacks on ${PREV_BRANCH}"
+          LOCK_HOLD_NUM+=("$num")
+          LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+          LOCK_HOLD_LOG+=("${LOCK_ERR}"$'\n\n'"${rebase_log}")
+          LOCK_HOLD_LABELS+=("$labels")
+          LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+          continue
+        fi
+      else
+        git rebase --abort 2>/dev/null || true
+        echo "  CONFLICT #$num onto ${PREV_BRANCH}; the stack is cut here"
+        CONFLICT_NUM="$num"
+        CONFLICT_ONTO="$PREV_BRANCH"
+        CONFLICT_LOG="$rebase_log"
+        break
+      fi
+    fi
+
+    # Normalize yarn.lock on npm branches and fold it into the Dependabot
+    # commit (amend keeps its author and full message, including the
+    # updated-dependencies metadata; the committer becomes github-actions[bot],
+    # which the foreign-commit gate allows). No extra commit.
+    if [[ $is_npm -eq 1 ]]; then
+      if ! normalize_lockfile "$PREV_REF"; then
+        git reset -q --hard
+        echo "  HOLD #$num: yarn.lock could not be normalized (${LOCK_ERR}); next PR stacks on ${PREV_BRANCH}"
+        LOCK_HOLD_NUM+=("$num")
+        LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+        LOCK_HOLD_LOG+=("$LOCK_ERR")
+        LOCK_HOLD_LABELS+=("$labels")
+        LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+        continue
+      fi
+      if [[ $LOCK_CHANGED -eq 1 ]]; then
+        git add yarn.lock
+        git commit --quiet --amend --no-edit
+        lock_note+="normalize yarn.lock (amend); "
+      fi
+      git reset -q --hard
+    fi
+
+    # Never push a PR whose update vanished on the new parent (for example a
+    # yarn.lock-only bump whose conflict was resolved with the lower lockfile).
+    if git diff --quiet "$PREV_REF" HEAD; then
+      git reset -q --hard
+      LOCK_ERR="the update is empty on ${PREV_BRANCH} (a lockfile-only change lost to the lower PR's yarn.lock); comment \`@dependabot recreate\` once the PRs below merge"
+      echo "  HOLD #$num: ${LOCK_ERR}"
+      LOCK_HOLD_NUM+=("$num")
+      LOCK_HOLD_ONTO+=("$PREV_BRANCH")
+      LOCK_HOLD_LOG+=("$LOCK_ERR")
+      LOCK_HOLD_LABELS+=("$labels")
+      LOCK_HOLD_LINES+=("#${num} (${group}): ${LOCK_ERR}")
+      continue
     fi
 
     PLAN_NUM+=("$num")
@@ -590,7 +762,7 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
     PLAN_GROUP+=("$group")
 
     new_sha=$(git rev-parse HEAD)
-    action=""
+    action="$lock_note"
     if [[ "$base" != "$PREV_BRANCH" ]]; then
       action+="retarget ${base} → ${PREV_BRANCH}; "
     fi
@@ -706,7 +878,7 @@ for idx in "${!PLAN_NUM[@]}"; do
   if [[ "$new_sha" != "$old_sha" ]]; then
     if [[ "$DRY_RUN" == "true" ]]; then
       echo "[dry-run] would force-push ${head}: ${old_sha:0:7} → ${new_sha:0:7} (--force-with-lease)"
-    elif git push --quiet --force-with-lease="refs/heads/${head}:${old_sha}" origin \
+    elif git_auth push --quiet --force-with-lease="refs/heads/${head}:${old_sha}" origin \
         "stack-${num}:refs/heads/${head}"; then
       PUSHED_BRANCHES+=("$head")
       echo "Pushed ${head}: ${old_sha:0:7} → ${new_sha:0:7}"
@@ -736,6 +908,12 @@ for idx in "${!PLAN_NUM[@]}"; do
   CHAIN_LINES+=("${pos}. #${num} (${group}) → base \`${new_base}\`")
 done
 
+for idx in "${!LOCK_HOLD_NUM[@]}"; do
+  comment_conflict "${LOCK_HOLD_NUM[$idx]}" "${LOCK_HOLD_ONTO[$idx]}" "${LOCK_HOLD_LOG[$idx]}" \
+    "This PR is held out of the stack (yarn.lock conflict, normalization failure or empty update); the PRs above it were stacked without it."
+  remove_stacked_label "${LOCK_HOLD_NUM[$idx]}" "${LOCK_HOLD_LABELS[$idx]}"
+done
+
 if [[ -n "$CONFLICT_NUM" && $APPLY_FAILED -eq 0 ]]; then
   echo ""
   echo "CONFLICT rebasing #$CONFLICT_NUM onto ${CONFLICT_ONTO}"
@@ -757,6 +935,10 @@ print_summary() {
   echo "Held out (non-Dependabot commits; not rebased, pushed or retargeted): ${#HELD_LINES[@]}"
   if [[ ${#HELD_LINES[@]} -gt 0 ]]; then
     printf '  SKIP %s\n' "${HELD_LINES[@]}"
+  fi
+  echo "Held out (yarn.lock conflict, normalization failure or empty update): ${#LOCK_HOLD_LINES[@]}"
+  if [[ ${#LOCK_HOLD_LINES[@]} -gt 0 ]]; then
+    printf '  SKIP %s\n' "${LOCK_HOLD_LINES[@]}"
   fi
   if [[ -n "$CONFLICT_NUM" ]]; then
     echo "Conflict: #$CONFLICT_NUM onto ${CONFLICT_ONTO}; PRs above it were not touched."

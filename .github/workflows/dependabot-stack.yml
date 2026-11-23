@@ -19,6 +19,11 @@
 # GitHub otherwise rejects with HTTP 422). Chained bases alone do not form a
 # stack. No gh extension is needed.
 #
+# yarn.lock: rebasing npm branches merges yarn.lock as text and can leave a
+# non-canonical lockfile that fails `yarn install --immutable` in CI. The
+# script normalizes it with Yarn on each rebased npm branch and amends the
+# Dependabot commit; see its header for the pull_request_target safety rules.
+#
 # Concurrency is set on the JOB, not the workflow. pull_request_target fires
 # for every PR, and the job `if` skips non-Dependabot PRs. With a
 # workflow-level group, that skipped run still entered the group and replaced
@@ -78,6 +83,22 @@ jobs:
           # pull_request_target checks out the base ref by default (trusted).
           # Script lives on the default branch / this workflow's ref.
           path: .stack-src
+          # No token left in .stack-src/.git/config for later steps to read.
+          persist-credentials: false
+
+      # Node and Yarn for yarn.lock normalization on npm branches. Same order
+      # as .github/actions/setup-node-yarn, but no dependency cache and no
+      # install: on pull_request_target a cache filled from PR content could
+      # be poisoned. The Node version comes from the trusted checkout; the
+      # script pins Yarn to the trunk's packageManager and runs it with
+      # scripts disabled and no secrets in its environment.
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version-file: .stack-src/.nvmrc
 
       - name: Stack / restack Dependabot PRs
         env:
