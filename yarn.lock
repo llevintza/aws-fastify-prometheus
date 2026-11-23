@@ -1021,13 +1021,13 @@ __metadata:
   linkType: hard
 
 "@fastify/ajv-compiler@npm:^4.0.5":
-  version: 4.0.7
-  resolution: "@fastify/ajv-compiler@npm:4.0.7"
+  version: 4.0.8
+  resolution: "@fastify/ajv-compiler@npm:4.0.8"
   dependencies:
     ajv: "npm:^8.12.0"
     ajv-formats: "npm:^3.0.1"
     fast-uri: "npm:^4.0.0"
-  checksum: 10c0/af9d212b87921c05d8d0d64fa1a0e0dd3db9d06e02bd8ae8448e2024352c6373fc6285ed3189444ab0df1c52b4921f7250544902725ce7f32696fec0fc416759
+  checksum: 10c0/6f2787457b7514e38a19d40da9b017fd101b02d52a2d1e3ca79b6a2430890395f02d4b36c06b9a0dddff632580e945fabf31b729bdb13a510d11709667125797
   languageName: node
   linkType: hard
 
