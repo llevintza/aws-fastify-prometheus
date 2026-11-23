@@ -134,6 +134,13 @@ yarn semantic-release --dry-run --no-ci --branches "$(git branch --show-current)
 
 Look for `Contract analyzeCommits complete: …` in the output.
 
+`@semantic-release/commit-analyzer` is pinned to an exact version in
+`devDependencies` on purpose. The contract analyzer
+(`scripts/semantic-release-analyze-commits.js`) calls its `analyzeCommits` API
+directly, so review any Dependabot bump of it deliberately: run the dry run
+above and confirm that `feat`, `fix` and Dependabot commits still score as
+expected before merging.
+
 ## Related docs
 
 - [Branching Strategy](BRANCHING_STRATEGY.md) — trunk-based flow aligned with
