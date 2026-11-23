@@ -1,24 +1,31 @@
 version: 2
 updates:
-  # Primary npm dependency updates - Comprehensive weekly update
+  # Primary npm dependency updates
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      # Standard cron ORs day-of-month and day-of-week when both are set, so
+      # this runs on days 1-7 of every month AND on every Monday, at 09:00
+      # America/New_York. It is NOT "first Monday of the month".
+      cronjob: "0 9 1-7 * 1"
       timezone: "America/New_York"
     open-pull-requests-limit: 25
     assignees:
       - "llevintza"
+    # `include: "scope"` appends the scope itself: prefix "chore" gives
+    # `chore(deps): ...` (production) and `chore(deps-dev): ...` (development).
+    # Never put a scope in the prefix (it produced `chore(deps)(deps): ...`).
+    # Every commit lands on main (merge commits), so this must stay a valid
+    # Conventional Commit for commitlint and semantic-release.
     commit-message:
-      prefix: "chore(deps)"
-      prefix-development: "chore(deps-dev)"
+      prefix: "chore"
+      prefix-development: "chore"
       include: "scope"
+    # Labels must exist in the repo or Dependabot silently drops them.
+    # Workflows only rely on `stacked` (created by the stack script).
     labels:
       - "dependencies"
-      - "dependabot"
-      - "bi-weekly-update"
-      - "automated"
     versioning-strategy: "auto"
     rebase-strategy: "disabled"
     
@@ -216,23 +223,25 @@ updates:
     pull-request-branch-name:
       separator: "/"
 
-  # GitHub Actions updates - optimized schedule
+  # GitHub Actions updates
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      # Same OR semantics as above: days 1-7 of every month AND every Monday.
+      cronjob: "0 9 1-7 * 1"
       timezone: "America/New_York"
     open-pull-requests-limit: 10
     assignees:
       - "llevintza"
+    # Gives `ci(deps): ...` — `ci` never releases (.releaserc.js) and stays
+    # hidden in the changelog; the contract analyzer scores Actions as none.
     commit-message:
-      prefix: "chore(ci)"
+      prefix: "ci"
       include: "scope"
     labels:
+      - "dependencies"
       - "github-actions"
-      - "automated"
-      - "ci"
     rebase-strategy: "disabled"
     
     groups:
