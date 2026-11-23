@@ -39,6 +39,12 @@ base before pushing and rolls the base back if the push fails. The two copies of
 that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
 (**Dependabot Docs Sync** job) fails if they differ.
 
+Dependabot scope: version updates cover **direct** dependencies only
+(transitives move with their direct parent). Dependabot alerts and security
+updates are enabled; security PRs land in `security-patch-minor` /
+`security-major` (npm) and `actions-security-*` groups, split so one major never
+holds a patch.
+
 Retired (function folded elsewhere or replaced by Dependabot):
 
 - `code-quality.yml` — duplicated lint/build; bundle size now in CI build

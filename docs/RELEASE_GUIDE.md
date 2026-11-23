@@ -77,7 +77,9 @@ reports a conflict. Auto-merge only takes the stack bottom, and only when every
 row in the `updated-dependencies` commit metadata is a patch (highest type wins)
 and no one else pushed to the branch (a GitHub **Update branch** merge commit
 counts, too); everything else waits for a human. Auto-merge is bound to the head
-SHA whose CI passed.
+SHA whose CI passed. Security-update groups are split by update type
+(patch+minor vs major), so a security major is held for review without holding
+security patches; patch-only security PRs at the stack bottom can auto-merge.
 
 The stack workflow never rewrites a Dependabot PR that someone else pushed to:
 it holds that PR out of the stack and comments why. To bring it back, merge it
