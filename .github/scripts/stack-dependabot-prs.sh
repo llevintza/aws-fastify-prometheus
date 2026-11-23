@@ -29,10 +29,12 @@
 #      Native stacks: GitHub rejects a base change (HTTP 422 "part of a
 #      stack") for a PR that is in a native stack. Before step 3a, the script
 #      unstacks (REST POST stacks/<n>/unstack) every open stack that holds a
-#      PR whose base must change. A stack whose PRs already chain as planned
-#      is left alone, so an up-to-date stack costs no unstack and no
-#      retarget (only pushes when the trunk moved). An unstack failure stops
-#      before any retarget or push.
+#      planned PR unless its open members are exactly the bottom of the
+#      planned chain (equal to it or a prefix of it). That covers a stacked PR
+#      whose base must change and a stack still holding a PR that left the
+#      chain (held, cut by a conflict). A matching stack is left alone, so an
+#      up-to-date stack costs no unstack and no retarget (only pushes when
+#      the trunk moved). An unstack failure stops before any retarget or push.
 #   4. Relink the chain as a native GitHub stack (REST Stacks API): no-op
 #      when the existing stack already equals the chain, `add` the missing
 #      top PRs when it is a prefix of the chain, otherwise create a new
@@ -43,8 +45,8 @@
 #
 # Merge order: GROUP_ORDER, bottom first. Security updates sit at the very
 # bottom so they merge first: the security groups, then any single security
-# PR (`security-update`: no known group, and its body or commits reference a
-# GHSA advisory or carry Dependabot's security-update footer). Majors still
+# PR (`security-update`: no known group, and its body carries the footer
+# Dependabot adds only to security-update PRs). Majors still
 # wait for a human (auto-merge only takes patch updates).
 #
 # GitHub API: every call is REST (`gh api`), so a classic PAT with only the
@@ -179,8 +181,9 @@ detect_group() {
 list_dependabot_prs() {
   # Fields: number|headRefName|baseRefName|title|labels(csv)|url|security(0/1)
   # REST reports the Dependabot author as `dependabot[bot]`. security=1 when
-  # the body names a GHSA advisory or carries the footer Dependabot adds only
-  # to security-update PRs.
+  # the body carries the footer Dependabot adds only to security-update PRs.
+  # A GHSA match is NOT used: copied release notes and changelogs in version
+  # updates often cite GHSA IDs.
   gh api --paginate "repos/${GH_REPO}/pulls?state=open&per_page=100" --jq '
     .[]
     | select(.user.login == "dependabot[bot]")
@@ -191,18 +194,11 @@ list_dependabot_prs() {
         (.title | gsub("\\|"; "/")),
         ([.labels[].name] | join(",")),
         .html_url,
-        (if ((.body // "") | test("GHSA-[0-9a-z]{4}-|automated security fix PRs"; "i"))
+        (if ((.body // "") | test("automated security fix PRs"; "i"))
          then "1" else "0" end)
       ]
     | join("|")
   '
-}
-
-# True when a commit message on the PR names a GHSA advisory.
-commits_reference_ghsa() {
-  local pr_number="$1"
-  [[ "$(gh api "repos/${GH_REPO}/pulls/${pr_number}/commits?per_page=100" \
-    --jq '[.[].commit.message] | join("\n") | test("GHSA-[0-9a-z]{4}-"; "i")' 2>/dev/null)" == "true" ]]
 }
 
 # --- native stacks (REST Stacks API) ---
@@ -481,7 +477,7 @@ for line in "${PR_LINES[@]}"; do
   group=$(detect_group "$head" "$title" "$labels")
   rank=$(group_rank "$group")
   # A single (ungrouped) security PR goes to the bottom with the groups.
-  if [[ "$rank" == "999" ]] && { [[ "$security" == "1" ]] || commits_reference_ghsa "$num"; }; then
+  if [[ "$rank" == "999" && "$security" == "1" ]]; then
     group="security-update"
     rank=$(group_rank "$group")
   fi
@@ -616,33 +612,53 @@ if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
     echo "ERROR: could not list native stacks (REST GET stacks); nothing was mutated." >&2
     exit 1
   fi
-  # A PR in a native stack cannot change base (HTTP 422), so unstack every
-  # stack holding a PR whose base must change. Stacks that already chain as
-  # planned are kept.
+  # Keep a stack only when its open members are exactly the bottom of the
+  # planned chain (equal to it or a prefix of it): every member then already
+  # chains as planned and link_stack can keep or extend it. Unstack any other
+  # stack that holds a planned PR, because either one of its PRs must change
+  # base (GitHub answers HTTP 422 for a stacked PR) or it holds a PR that is
+  # no longer in the chain (held, cut by a conflict), which would make the
+  # relink fail on every run.
   declare -A UNSTACK_WHY=()
   for idx in "${!PLAN_NUM[@]}"; do
-    num="${PLAN_NUM[$idx]}"
-    snum="${PR_STACK[$num]:-}"
-    if [[ -n "$snum" && "${PLAN_OLD_BASE[$idx]}" != "${PLAN_NEW_BASE[$idx]}" ]]; then
-      UNSTACK_WHY[$snum]+="#$num "
+    snum="${PR_STACK[${PLAN_NUM[$idx]}]:-}"
+    if [[ -z "$snum" || -n "${UNSTACK_WHY[$snum]:-}" ]]; then
+      continue
     fi
+    members="${STACK_MEMBERS[$snum]}"
+    if [[ "${PLAN_NUM[*]} " == "$members "* ]]; then
+      continue
+    fi
+    why=""
+    for m in $members; do
+      if [[ " ${PLAN_NUM[*]} " != *" $m "* ]]; then
+        why+="#$m is not in the chain; "
+      fi
+    done
+    for j in "${!PLAN_NUM[@]}"; do
+      if [[ "${PR_STACK[${PLAN_NUM[$j]}]:-}" == "$snum" \
+          && "${PLAN_OLD_BASE[$j]}" != "${PLAN_NEW_BASE[$j]}" ]]; then
+        why+="#${PLAN_NUM[$j]} changes base; "
+      fi
+    done
+    UNSTACK_WHY[$snum]="${why:-order differs from the chain; }"
   done
   echo ""
   if [[ ${#UNSTACK_WHY[@]} -eq 0 ]]; then
-    echo "Native stacks: no unstack needed (no stacked PR changes base)."
+    echo "Native stacks: no unstack needed (existing stack already matches the chain bottom)."
   fi
   for snum in "${!UNSTACK_WHY[@]}"; do
-    why="${UNSTACK_WHY[$snum]% }"
+    why="${UNSTACK_WHY[$snum]%; }"
     if [[ "$DRY_RUN" == "true" ]]; then
-      echo "[dry-run] would unstack native stack #$snum (${STACK_MEMBERS[$snum]}); base changes needed for ${why}"
+      echo "[dry-run] would unstack native stack #$snum (${STACK_MEMBERS[$snum]}): ${why}"
     elif gh api -X POST "repos/${GH_REPO}/stacks/${snum}/unstack" >/dev/null; then
-      echo "Unstacked native stack #$snum (${STACK_MEMBERS[$snum]}); base changes needed for ${why}"
+      echo "Unstacked native stack #$snum (${STACK_MEMBERS[$snum]}): ${why}"
     else
       echo "ERROR: unstack of native stack #$snum failed; nothing was retargeted or pushed." >&2
       APPLY_FAILED=1
       break
     fi
-    STACK_ACTIONS+=("unstack native stack #$snum (base changes for ${why})")
+    STACK_ACTIONS+=("unstack native stack #$snum (${why})")
     for p in ${STACK_MEMBERS[$snum]}; do
       unset "PR_STACK[$p]"
     done

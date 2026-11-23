@@ -41,11 +41,12 @@ that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
 
 Native stacks go through the Stacks REST API (no gh extension). GitHub refuses a
 base change for a PR inside a native stack (HTTP 422), so the script unstacks
-only a stack holding a PR whose base must change, then retargets, pushes and
-relinks (create, or `add` when the old stack is a prefix). A stack that already
-matches the plan is left alone. Security updates sort to the bottom: the
-security groups plus any single security PR (`security-update`: GHSA reference
-or Dependabot's security-update footer).
+any stack holding a planned PR unless its members are already the bottom of the
+planned chain, then retargets, pushes and relinks (create, or `add` when the old
+stack is a prefix). A stack that already matches the plan is left alone.
+Security updates sort to the bottom: the security groups plus any single
+security PR (`security-update`: Dependabot's security-update footer in the body;
+GHSA IDs are not matched because version-update changelogs cite them too).
 
 The stack workflow's concurrency group is on the job, not the workflow, so a
 skipped non-Dependabot `pull_request_target` run can no longer cancel a pending

@@ -80,9 +80,9 @@ counts, too); everything else waits for a human. Auto-merge is bound to the head
 SHA whose CI passed. Security-update groups are split by update type
 (patch+minor vs major), so a security major is held for review without holding
 security patches; patch-only security PRs at the stack bottom can auto-merge.
-All security updates (grouped, and single PRs that reference a GHSA advisory)
-sit at the bottom of the stack, so they merge before version updates; a security
-major at the bottom waits for a human and blocks the PRs above it until merged.
+All security updates (grouped, and single Dependabot security-update PRs) sit at
+the bottom of the stack, so they merge before version updates; a security major
+at the bottom waits for a human and blocks the PRs above it until merged.
 
 The stack workflow never rewrites a Dependabot PR that someone else pushed to:
 it holds that PR out of the stack and comments why. To bring it back, merge it
