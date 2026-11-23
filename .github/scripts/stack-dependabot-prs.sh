@@ -26,10 +26,13 @@
 #      held out (conflict comment) and the next PR stacks on the same parent.
 #      github_actions branches are rebased only.
 #      Safety (pull_request_target, untrusted PR content): Yarn runs only on
-#      Dependabot-authored branches that passed step 1, only when the PR
+#      Dependabot-authored branches that passed step 1 (the tip and every
+#      replayed commit must be ones step 1 verified, else the PR is held:
+#      no time-of-check / time-of-use gap), only when the PR
 #      changes nothing but package.json / yarn.lock (so .yarnrc.yml, .yarn/
-#      and plugins are the trunk's), adds no non-registry descriptor (git,
-#      patch, portal, link, exec, file, URL) and its packageManager equals the trunk's,
+#      and plugins are the trunk's), every added or changed dependency value
+#      is a semver range / dist-tag or npm: alias (allowlist), and its
+#      packageManager equals the trunk's,
 #      with lifecycle scripts disabled, in update-lockfile mode (no link or
 #      build step), and with an empty environment (env -i: no GH_TOKEN). The
 #      token is never written to the clone: git gets it per command through
@@ -294,17 +297,20 @@ link_stack() {
   STACK_ACTIONS+=("create native stack: ${want[*]}")
 }
 
-# Print why a PR must be held out of the stack, or nothing when every commit
-# is Dependabot's. Same author/committer rule as dependabot-auto-merge.yml.
-# Fails closed: an unreadable or truncated commit list is a hold.
+# Print "<verified commit shas, oldest → tip>|<hold reason>"; the reason is
+# empty when every commit is Dependabot's. Same author/committer rule as
+# dependabot-auto-merge.yml. Fails closed: an unreadable or truncated commit
+# list is a hold. The plan step replays only these verified shas.
 hold_reason() {
   local pr_number="$1"
   local reason
+  # shellcheck disable=SC2016 # $commits / $reason are jq variables, not shell
   if ! reason=$(gh api "repos/${GH_REPO}/pulls/${pr_number}/commits?per_page=100" --jq '
-      if length >= 100 then
+      . as $commits
+      | (if length >= 100 then
         "commit list hit the 100-commit page limit; authorship cannot be verified"
       else
-        [ .[]
+        [ $commits[]
           | select(
               # foreign-commit-gate:begin (CI fails if this differs from the other copy)
               ((.author.login // "") != "dependabot[bot]")
@@ -315,9 +321,10 @@ hold_reason() {
           | "\(.sha[0:7]) (author \(.author.login // "unknown"), committer \(.committer.login // "unknown"))"
         ]
         | if length == 0 then "" else "\(length) non-Dependabot commit(s): \(join(", "))" end
-      end
+      end) as $reason
+      | "\([$commits[].sha] | join(" "))|\($reason)"
     '); then
-    reason="could not list the PR commits (API error); authorship cannot be verified"
+    reason="|could not list the PR commits (API error); authorship cannot be verified"
   fi
   printf '%s' "$reason"
 }
@@ -406,9 +413,10 @@ comment_hold() {
 ${HOLD_MARKER_BEGIN}
 ⏸️ **Held out of the Dependabot stack**
 
-This branch has commits that Dependabot did not author, or that someone other
-than Dependabot or the stack workflow committed, so the stack workflow will not
-rebase, force-push or retarget it:
+This branch has commits that Dependabot did not author, that someone other
+than Dependabot or the stack workflow committed, or that appeared after the
+authorship check, so the stack workflow will not rebase, force-push or
+retarget it:
 
 - ${reason}
 
@@ -520,11 +528,26 @@ normalize_lockfile() {
     LOCK_ERR="the PR changes files other than package.json / yarn.lock; Yarn was not run"
     return 1
   fi
-  # Registry versions only: git, patch, portal, link, exec and file
+  # Registry versions only (allowlist): every added or changed value in the
+  # dependency fields must be a semver range / dist-tag, or an npm: alias of
+  # one. git, GitHub shorthand, patch, portal, link, exec, file, path and URL
   # descriptors can make Yarn pack, prepare or run code even with scripts off.
-  if git diff "$parent_ref" -- package.json | grep '^+' \
-      | grep -qE '"(git[+:]|github:|gitlab:|bitbucket:|patch:|portal:|link:|exec:|file:|https?://)'; then
-    LOCK_ERR="package.json adds a non-registry dependency descriptor; Yarn was not run"
+  local bad
+  if ! bad=$(jq -r --argjson old "$(git show "${parent_ref}:package.json")" '
+      def ok: test("^[0-9A-Za-z.^~<>=*+| -]+$")
+        or test("^npm:(@[a-z0-9._~-]+/)?[a-z0-9._~-]+@[0-9A-Za-z.^~<>=*+| -]+$");
+      . as $new
+      | ["dependencies", "devDependencies", "peerDependencies",
+         "optionalDependencies", "resolutions"][] as $f
+      | ($new[$f] // {}) | to_entries[]
+      | select((($old[$f] // {})[.key]) != .value)
+      | select((.value | type) != "string" or (.value | ok | not))
+      | "\(.key)=\(.value)"' package.json); then
+    LOCK_ERR="could not read package.json dependency fields; Yarn was not run"
+    return 1
+  fi
+  if [[ -n "$bad" ]]; then
+    LOCK_ERR="package.json adds a non-registry descriptor ($(head -n 3 <<<"$bad" | tr '\n' ' ')); Yarn was not run"
     return 1
   fi
   pm_tree=$(jq -r '.packageManager // ""' package.json)
@@ -613,7 +636,9 @@ ELIGIBLE=()
 HELD_LINES=()
 for rec in "${SORTED[@]}"; do
   IFS='|' read -r _key num head base title labels url group <<<"$rec"
-  reason=$(hold_reason "$num")
+  hold_out=$(hold_reason "$num")
+  verified="${hold_out%%|*}"
+  reason="${hold_out#*|}"
   if [[ -n "$reason" ]]; then
     echo "  SKIP #$num ($group): held out of the stack; $reason"
     HELD_LINES+=("#${num} (${group}, base ${base}): ${reason}")
@@ -621,14 +646,14 @@ for rec in "${SORTED[@]}"; do
     remove_stacked_label "$num" "$labels"
   else
     echo "  ok   #$num ($group)"
-    ELIGIBLE+=("$rec")
+    ELIGIBLE+=("${rec}|${verified}")
   fi
 done
 
 echo ""
 echo "Planned stack (bottom → top):"
 for rec in "${ELIGIBLE[@]}"; do
-  IFS='|' read -r _key num head base title labels url group <<<"$rec"
+  IFS='|' read -r _key num head base title labels url group _verified <<<"$rec"
   echo "  #$num  group=${group}  head=${head}  current_base=${base}"
 done
 if [[ ${#ELIGIBLE[@]} -eq 0 ]]; then
@@ -679,7 +704,7 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
   PREV_BRANCH="$BASE_BRANCH"
   PREV_REF="origin/${BASE_BRANCH}"
   for rec in "${ELIGIBLE[@]}"; do
-    IFS='|' read -r _key num head base title labels url group <<<"$rec"
+    IFS='|' read -r _key num head base title labels url group verified <<<"$rec"
     # Fetch the head and its CURRENT base (pre-push tips: nothing is pushed
     # until step 3). Replaying only <current base>..<head> rebases exactly the
     # commits the hold check verified, so a PR that sat on a held branch can
@@ -691,6 +716,29 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
       exit 1
     fi
     old_sha=$(git rev-parse "origin/${head}")
+
+    # Authorship TOCTOU guard: the tip must still be the one the hold check
+    # verified, and every commit the rebase replays (<base>..<tip>) must be one
+    # it verified. Otherwise hold the PR before any checkout, rebase or Yarn.
+    moved=""
+    if [[ "$old_sha" != "${verified##* }" ]]; then
+      moved="tip is ${old_sha:0:7}, the authorship check saw ${verified##* }"
+    else
+      for c in $(git rev-list "origin/${base}..${old_sha}"); do
+        if [[ " ${verified} " != *" ${c} "* ]]; then
+          moved="commit ${c:0:7} in ${base}..${head} was not in the checked list"
+          break
+        fi
+      done
+    fi
+    if [[ -n "$moved" ]]; then
+      reason="branch moved after the authorship check (${moved})"
+      echo "  SKIP #$num ($group): held out of the stack; $reason"
+      HELD_LINES+=("#${num} (${group}, base ${base}): ${reason}")
+      comment_hold "$num" "$reason"
+      remove_stacked_label "$num" "$labels"
+      continue
+    fi
     git checkout --quiet -B "stack-${num}" "$old_sha"
     is_npm=0
     if [[ "$head" == dependabot/npm_and_yarn/* ]]; then
