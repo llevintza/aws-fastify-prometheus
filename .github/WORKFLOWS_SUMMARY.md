@@ -34,6 +34,12 @@ message metadata (the PR body has none). The stack script matches the PR author
 as `app/dependabot`, `dependabot[bot]` or `dependabot`, since `gh pr list`
 reports the GraphQL form.
 
+Dependabot scope: version updates cover **direct** dependencies only
+(transitives move with their direct parent). Dependabot alerts and security
+updates are enabled; security PRs land in `security-patch-minor` /
+`security-major` (npm) and `actions-security-*` groups, split so one major never
+holds a patch.
+
 Retired (function folded elsewhere or replaced by Dependabot):
 
 - `code-quality.yml` — duplicated lint/build; bundle size now in CI build

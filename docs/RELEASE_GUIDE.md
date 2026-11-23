@@ -76,8 +76,10 @@ workflow). Do not rebase upper Dependabot branches by hand unless the workflow
 reports a conflict. Auto-merge only takes the stack bottom, and only when every
 row in the `updated-dependencies` commit metadata is a patch (highest type wins)
 and no one else pushed to the branch (a GitHub **Update branch** merge commit
-counts, too); everything else waits for a human. Auto-merge is bound to the
-head SHA whose CI passed.
+counts, too); everything else waits for a human. Auto-merge is bound to the head
+SHA whose CI passed. Security-update groups are split by update type
+(patch+minor vs major), so a security major is held for review without holding
+security patches; patch-only security PRs at the stack bottom can auto-merge.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
