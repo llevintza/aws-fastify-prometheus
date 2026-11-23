@@ -47,11 +47,12 @@ Config: [`.releaserc.js`](../.releaserc.js). Analyzer:
 
 ## Contract-based dependency bumps
 
-Dependabot commits stay `chore(deps)` / `chore(deps-dev)`. The custom
-`analyzeCommits` plugin reads each Dependabot commit’s `updated-dependencies`
-YAML and the `package.json` (and peer/`fp()`/`engines`) diff, then scores by
-**what consumers of this package can observe** — not by the dependency’s own
-major/minor/patch digit.
+Dependabot npm commits are `chore(deps)` / `chore(deps-dev)` and GitHub Actions
+commits are `ci(deps)` (prefix plus `include: "scope"` in `dependabot.yml`;
+never a scope in the prefix). The custom `analyzeCommits` plugin reads each
+Dependabot commit’s `updated-dependencies` YAML and the `package.json` (and
+peer/`fp()`/`engines`) diff, then scores by **what consumers of this package can
+observe** — not by the dependency’s own major/minor/patch digit.
 
 Summarized ranks (`none` < `patch` < `minor` < `major`; PR/release = max across
 members):
@@ -72,7 +73,11 @@ The full decision table is implemented in
 Dependabot PRs are ordered into a stack. **Merge from the bottom** (the PR based
 on `main`). After a merge, restack of the remaining chain is automated (stack
 workflow). Do not rebase upper Dependabot branches by hand unless the workflow
-reports a conflict.
+reports a conflict. Auto-merge only takes the stack bottom, and only when every
+row in the `updated-dependencies` commit metadata is a patch (highest type wins)
+and no one else pushed to the branch (a GitHub **Update branch** merge commit
+counts, too); everything else waits for a human. Auto-merge is bound to the
+head SHA whose CI passed.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
