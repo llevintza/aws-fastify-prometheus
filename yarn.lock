@@ -1961,14 +1961,14 @@ __metadata:
   linkType: hard
 
 "@octokit/plugin-throttling@npm:^11.0.0":
-  version: 11.0.1
-  resolution: "@octokit/plugin-throttling@npm:11.0.1"
+  version: 11.0.5
+  resolution: "@octokit/plugin-throttling@npm:11.0.5"
   dependencies:
-    "@octokit/types": "npm:^14.0.0"
+    "@octokit/types": "npm:^17.0.0"
     bottleneck: "npm:^2.15.3"
   peerDependencies:
     "@octokit/core": ^7.0.0
-  checksum: 10c0/a77e6dcee6d85e393991c12cf44b89c35f98ce515e9571e32f130eb9fb9fbef0126334fbe166bab3978062f3bfaffcafbd8a7a91fe43688a19fecc972e95407f
+  checksum: 10c0/6fbd6cbe878577a0a728593a525d9b5ce729ec2359cc7b2a80dddb432d6d8e4fbce51ca9695098036827acbef9642b63c14114ff9d0b7c745a502b165da47808
   languageName: node
   linkType: hard
 
@@ -8995,13 +8995,14 @@ __metadata:
   linkType: hard
 
 "own-keys@npm:^1.0.1":
-  version: 1.0.1
-  resolution: "own-keys@npm:1.0.1"
+  version: 1.0.2
+  resolution: "own-keys@npm:1.0.2"
   dependencies:
-    get-intrinsic: "npm:^1.2.6"
+    call-bound: "npm:^1.0.4"
+    get-intrinsic: "npm:^1.3.0"
     object-keys: "npm:^1.1.1"
     safe-push-apply: "npm:^1.0.0"
-  checksum: 10c0/6dfeb3455bff92ec3f16a982d4e3e65676345f6902d9f5ded1d8265a6318d0200ce461956d6d1c70053c7fe9f9fe65e552faac03f8140d37ef0fdd108e67013a
+  checksum: 10c0/84b0d9959475231166c3d4b9abd1b8af8042911e2e5625761eed980d1a1e4381cf52b34d907cae21ee8766c79de943f3cd85eba636149dee5e64cceff3ccdb78
   languageName: node
   linkType: hard
 
@@ -9420,7 +9421,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"possible-typed-array-names@npm:^1.0.0":
+"possible-typed-array-names@npm:^1.0.0, possible-typed-array-names@npm:^1.1.0":
   version: 1.1.0
   resolution: "possible-typed-array-names@npm:1.1.0"
   checksum: 10c0/c810983414142071da1d644662ce4caebce890203eb2bc7bf119f37f3fe5796226e117e6cca146b521921fa6531072674174a3325066ac66fce089a53e1e5196
@@ -9820,7 +9821,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"reflect.getprototypeof@npm:^1.0.10, reflect.getprototypeof@npm:^1.0.6":
+"reflect.getprototypeof@npm:^1.0.10":
   version: 1.0.10
   resolution: "reflect.getprototypeof@npm:1.0.10"
   dependencies:
@@ -11282,16 +11283,16 @@ __metadata:
   linkType: hard
 
 "typed-array-length@npm:^1.0.7":
-  version: 1.0.7
-  resolution: "typed-array-length@npm:1.0.7"
+  version: 1.0.8
+  resolution: "typed-array-length@npm:1.0.8"
   dependencies:
-    call-bind: "npm:^1.0.7"
-    for-each: "npm:^0.3.3"
-    gopd: "npm:^1.0.1"
-    is-typed-array: "npm:^1.1.13"
-    possible-typed-array-names: "npm:^1.0.0"
-    reflect.getprototypeof: "npm:^1.0.6"
-  checksum: 10c0/e38f2ae3779584c138a2d8adfa8ecf749f494af3cd3cdafe4e688ce51418c7d2c5c88df1bd6be2bbea099c3f7cea58c02ca02ed438119e91f162a9de23f61295
+    call-bind: "npm:^1.0.9"
+    for-each: "npm:^0.3.5"
+    gopd: "npm:^1.2.0"
+    is-typed-array: "npm:^1.1.15"
+    possible-typed-array-names: "npm:^1.1.0"
+    reflect.getprototypeof: "npm:^1.0.10"
+  checksum: 10c0/5319f740fc426a3217182c2f7c87656acb0903e046de5a938e30167337d26abf1bb3ad4b32833a72521a4cc58223aec80627b38b357d0a3d5fd64881427e77ab
   languageName: node
   linkType: hard
 
