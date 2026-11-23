@@ -81,7 +81,13 @@ fi
 export GH_TOKEN GH_REPO
 
 # Fixed merge order: bottom (index 0) → top. Unknown groups sort after these by PR number.
+# Security patch/minor groups sit at the bottom so fixes merge first (only the
+# stack bottom may auto-merge); security majors sit near the top for review.
+# detect_group prefers the longest match, so `actions-security-*` beats the
+# npm `security-*` names it contains.
 GROUP_ORDER=(
+  security-patch-minor
+  actions-security-patch-minor
   github-actions-official
   security-actions
   dependency-actions
@@ -96,6 +102,8 @@ GROUP_ORDER=(
   other-dependencies
   transitive-misc
   security-critical
+  actions-security-major
+  security-major
   fastify-ecosystem-major
 )
 
