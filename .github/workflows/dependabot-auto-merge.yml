@@ -5,7 +5,7 @@ name: Dependabot Auto-Merge
 # which GitHub is browning out / blocking on public repos.
 on:
   workflow_run:
-    workflows: ["CI/CD"]
+    workflows: ['CI/CD']
     types: [completed]
 
 permissions:
@@ -37,7 +37,7 @@ jobs:
           fi
 
           pr_json=$(gh pr list --head "$HEAD_BRANCH" --state open \
-            --json number,author,mergeable,baseRefName,title,body,url --jq '.[0] // empty')
+            --json number,author,mergeable,baseRefName,headRefOid,title,body,url --jq '.[0] // empty')
           if [ -z "$pr_json" ]; then
             echo "No open PR for branch $HEAD_BRANCH; skipping."
             exit 0
@@ -47,6 +47,7 @@ jobs:
           author=$(echo "$pr_json" | jq -r '.author.login')
           mergeable=$(echo "$pr_json" | jq -r '.mergeable')
           base_ref=$(echo "$pr_json" | jq -r '.baseRefName')
+          pr_head_sha=$(echo "$pr_json" | jq -r '.headRefOid')
           pr_title=$(echo "$pr_json" | jq -r '.title // ""')
           pr_body=$(echo "$pr_json" | jq -r '.body // ""')
 
@@ -62,6 +63,13 @@ jobs:
           echo "CI/CD succeeded for Dependabot PR #$pr_number ($HEAD_BRANCH @ $HEAD_SHA)"
           echo "Base: $base_ref  Mergeable: $mergeable"
 
+          # The verdict below is for the SHA whose CI just turned green. If the
+          # branch moved since, that newer commit gets its own CI + run.
+          if [ "$pr_head_sha" != "$HEAD_SHA" ]; then
+            echo "PR #$pr_number head is $pr_head_sha, not the CI SHA $HEAD_SHA; skipping."
+            exit 0
+          fi
+
           # Stack gate: only the bottom stacked PR (base == main) may auto-merge.
           # Upper stacked PRs wait until restack retargets them onto main.
           if [ "$base_ref" != "main" ]; then
@@ -69,29 +77,57 @@ jobs:
             exit 0
           fi
 
-          # Parse Dependabot update-types from the PR body trailer (highest wins).
-          update_type="unknown"
-          if echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-major'; then
-            update_type="version-update:semver-major"
-          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-minor'; then
-            update_type="version-update:semver-minor"
-          elif echo "$pr_body" | grep -Eq 'update-type:\s*version-update:semver-patch'; then
-            update_type="version-update:semver-patch"
-          fi
-          echo "Detected update_type=$update_type"
+          # Update type comes from the `updated-dependencies:` YAML block that
+          # Dependabot writes into the COMMIT MESSAGE only (the PR body never
+          # carries it). dependabot/fetch-metadata is not used: it reads the
+          # pull_request event payload, which workflow_run does not have.
+          # Read every commit on the PR (a stack-bottom PR based on main holds
+          # only its own commits) and keep the HIGHEST type, so a grouped PR
+          # with any major row is major, else any minor row is minor.
+          commits_json=$(gh api "repos/${GH_REPO}/pulls/${pr_number}/commits?per_page=100")
+          commit_messages=$(printf '%s\n' "$commits_json" | jq -r '.[].commit.message')
 
-          signals="$HEAD_BRANCH $pr_title $pr_body"
+          # Safety: a Dependabot PR that a human or another bot pushed to is
+          # not judged by Dependabot's metadata alone. Author must be
+          # dependabot[bot]; committer must be web-flow (Dependabot's signed
+          # commits) or github-actions[bot] (stack-script restacks). A GitHub
+          # "Update branch" merge commit also counts as foreign and blocks.
+          foreign_commits=$(printf '%s\n' "$commits_json" | jq -r '
+            [.[] | select(
+              # foreign-commit-gate:begin (CI fails if this differs from the other copy)
+              ((.author.login // "") != "dependabot[bot]")
+              or ((.committer.login // "")
+                  | IN("web-flow", "github-actions[bot]", "dependabot[bot]") | not)
+              # foreign-commit-gate:end
+            )] | length')
+          if [ "$foreign_commits" != "0" ]; then
+            echo "PR #$pr_number has $foreign_commits non-Dependabot commit(s); skipping auto-merge."
+            exit 0
+          fi
+
+          update_types=$(printf '%s\n' "$commit_messages" \
+            | sed -nE 's/^[[:space:]]*update-type:[[:space:]]*(version-update:semver-(major|minor|patch))[[:space:]]*$/\1/p')
+          update_type="unknown"
+          for level in major minor patch; do
+            if grep -qx "version-update:semver-${level}" <<<"$update_types"; then
+              update_type="version-update:semver-${level}"
+              break
+            fi
+          done
+          echo "Detected update_type=$update_type (rows: $(echo "$update_types" | grep -c . || true))"
+
+          signals="$HEAD_BRANCH $pr_title $pr_body $commit_messages"
 
           # High-risk / held rows: comment for manual review, do not auto-merge.
           needs_manual=0
-          if echo "$signals" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client'; then
+          if grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client' <<<"$signals"; then
             needs_manual=1
           fi
-          if echo "$signals" | grep -Eiq 'prom-client' && \
-             { [ "$update_type" = "version-update:semver-major" ] || echo "$signals" | grep -Eiq 'major|breaking'; }; then
+          if grep -Eiq 'prom-client' <<<"$signals" && \
+             { [ "$update_type" = "version-update:semver-major" ] || grep -Eiq 'major|breaking' <<<"$signals"; }; then
             needs_manual=1
           fi
-          if echo "$signals" | grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
+          if grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement' <<<"$signals"; then
             needs_manual=1
           fi
           if [ "$update_type" = "version-update:semver-major" ]; then
@@ -105,7 +141,7 @@ jobs:
           (major / held contract risk / denylisted group).
 
           **Branch:** \`${HEAD_BRANCH}\`
-          **Update type (from PR body):** ${update_type}
+          **Update type (highest in commit metadata):** ${update_type}
 
           **Recommended Actions:**
           1. Review changelogs and contract impact (peer range, engines, scrape/API)
@@ -128,12 +164,12 @@ jobs:
           fi
 
           # Extra denylist for production / ecosystem names even on patch metadata.
-          if echo "$signals" | grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem'; then
+          if grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem' <<<"$signals"; then
             echo "Denylisted dependency signals present; skipping auto-merge."
             exit 0
           fi
-          if echo "$signals" | grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' && \
-             ! echo "$signals" | grep -Eiq 'fastify-plugin'; then
+          if grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' <<<"$signals" && \
+             ! grep -Eiq 'fastify-plugin' <<<"$signals"; then
             echo "Denylisted fastify host signals present; skipping auto-merge."
             exit 0
           fi
@@ -155,8 +191,9 @@ jobs:
           fi
 
           # Repo disallows squash; use merge commit. No --subject (preserve Dependabot trailers).
+          # --match-head-commit: a push after this point cannot ride this auto-merge.
           # Keep --body short; never paste the full Dependabot PR body.
-          if ! gh pr merge "$pr_number" --merge --auto --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
+          if ! gh pr merge "$pr_number" --merge --auto --match-head-commit "$HEAD_SHA" --body "🤖 Auto-merged confident Dependabot patch after CI Success"; then
             echo "Auto-merge enable returned non-zero; checking PR state..."
             gh pr view "$pr_number" --json state,mergeable,mergeStateStatus,autoMergeRequest
             exit 1

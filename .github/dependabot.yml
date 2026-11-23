@@ -1,24 +1,31 @@
 version: 2
 updates:
-  # Primary npm dependency updates - Comprehensive weekly update
+  # Primary npm dependency updates
   - package-ecosystem: "npm"
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      # Standard cron ORs day-of-month and day-of-week when both are set, so
+      # this runs on days 1-7 of every month AND on every Monday, at 09:00
+      # America/New_York. It is NOT "first Monday of the month".
+      cronjob: "0 9 1-7 * 1"
       timezone: "America/New_York"
     open-pull-requests-limit: 25
     assignees:
       - "llevintza"
+    # `include: "scope"` appends the scope itself: prefix "chore" gives
+    # `chore(deps): ...` (production) and `chore(deps-dev): ...` (development).
+    # Never put a scope in the prefix (it produced `chore(deps)(deps): ...`).
+    # Every commit lands on main (merge commits), so this must stay a valid
+    # Conventional Commit for commitlint and semantic-release.
     commit-message:
-      prefix: "chore(deps)"
-      prefix-development: "chore(deps-dev)"
+      prefix: "chore"
+      prefix-development: "chore"
       include: "scope"
+    # Labels must exist in the repo or Dependabot silently drops them.
+    # Workflows only rely on `stacked` (created by the stack script).
     labels:
       - "dependencies"
-      - "dependabot"
-      - "bi-weekly-update"
-      - "automated"
     versioning-strategy: "auto"
     rebase-strategy: "disabled"
     
@@ -149,7 +156,7 @@ updates:
         update-types:
           - "major"
 
-      # Catch-all for remaining packages (reduces ungrouped transitive PR fan-out)
+      # Catch-all for remaining direct packages
       other-dependencies:
         patterns:
           - "*"
@@ -192,6 +199,31 @@ updates:
           - "major"
           - "minor"
           - "patch"
+
+      # SECURITY updates. Groups without `applies-to` only cover version
+      # updates, so security PRs need their own groups (needs Dependabot
+      # alerts + security updates enabled in repo settings). Split by
+      # update-type because dependabot-auto-merge.yml scores a grouped PR by
+      # its HIGHEST row: one major in a catch-all would hold every patch.
+      # No production/development split: transitive rows report a plain
+      # `indirect` dependency-type, and the release analyzer already scores
+      # each row on its own. Names must not contain `security-critical` or
+      # `security-actions` (auto-merge denylist / stack-script substring
+      # matching); the stack script ranks these in GROUP_ORDER.
+      security-patch-minor:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      security-major:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     
     # Security and stability rules
     # Note: Dependabot automatically excludes pre-release versions by default
@@ -207,32 +239,37 @@ updates:
     # Special handling for critical packages (let automation handle these carefully)
     # Major version updates for core framework will be grouped but reviewed carefully
     
-    # Always allow security updates
+    # Version updates for DIRECT dependencies only. `indirect` was removed: it
+    # made Dependabot open one ungrouped PR per transitive package (groups do
+    # not absorb standalone indirect bumps). Transitives still move in the
+    # lockfile when a direct dependency bumps. `allow` only filters VERSION
+    # updates; security updates for vulnerable transitives are unaffected.
     allow:
       - dependency-type: "direct"
-      - dependency-type: "indirect"
     
     # Better PR branch naming
     pull-request-branch-name:
       separator: "/"
 
-  # GitHub Actions updates - optimized schedule
+  # GitHub Actions updates
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "cron"
-      cronjob: "0 9 1-7 * 1" # First Monday of the month at 09:00 EST
+      # Same OR semantics as above: days 1-7 of every month AND every Monday.
+      cronjob: "0 9 1-7 * 1"
       timezone: "America/New_York"
     open-pull-requests-limit: 10
     assignees:
       - "llevintza"
+    # Gives `ci(deps): ...` — `ci` never releases (.releaserc.js) and stays
+    # hidden in the changelog; the contract analyzer scores Actions as none.
     commit-message:
-      prefix: "chore(ci)"
+      prefix: "ci"
       include: "scope"
     labels:
+      - "dependencies"
       - "github-actions"
-      - "automated"
-      - "ci"
     rebase-strategy: "disabled"
     
     groups:
@@ -265,3 +302,19 @@ updates:
           - "major"
           - "minor"
           - "patch"
+
+      # SECURITY updates for Actions (see the npm security groups above).
+      actions-security-patch-minor:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      actions-security-major:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"

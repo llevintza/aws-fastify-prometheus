@@ -47,11 +47,12 @@ Config: [`.releaserc.js`](../.releaserc.js). Analyzer:
 
 ## Contract-based dependency bumps
 
-Dependabot commits stay `chore(deps)` / `chore(deps-dev)`. The custom
-`analyzeCommits` plugin reads each Dependabot commit’s `updated-dependencies`
-YAML and the `package.json` (and peer/`fp()`/`engines`) diff, then scores by
-**what consumers of this package can observe** — not by the dependency’s own
-major/minor/patch digit.
+Dependabot npm commits are `chore(deps)` / `chore(deps-dev)` and GitHub Actions
+commits are `ci(deps)` (prefix plus `include: "scope"` in `dependabot.yml`;
+never a scope in the prefix). The custom `analyzeCommits` plugin reads each
+Dependabot commit’s `updated-dependencies` YAML and the `package.json` (and
+peer/`fp()`/`engines`) diff, then scores by **what consumers of this package can
+observe** — not by the dependency’s own major/minor/patch digit.
 
 Summarized ranks (`none` < `patch` < `minor` < `major`; PR/release = max across
 members):
@@ -72,7 +73,39 @@ The full decision table is implemented in
 Dependabot PRs are ordered into a stack. **Merge from the bottom** (the PR based
 on `main`). After a merge, restack of the remaining chain is automated (stack
 workflow). Do not rebase upper Dependabot branches by hand unless the workflow
-reports a conflict.
+reports a conflict. Auto-merge only takes the stack bottom, and only when every
+row in the `updated-dependencies` commit metadata is a patch (highest type wins)
+and no one else pushed to the branch (a GitHub **Update branch** merge commit
+counts, too); everything else waits for a human. Auto-merge is bound to the head
+SHA whose CI passed. Security-update groups are split by update type
+(patch+minor vs major), so a security major is held for review without holding
+security patches; patch-only security PRs at the stack bottom can auto-merge.
+All security updates (grouped, and single Dependabot security-update PRs) sit at
+the bottom of the stack, so they merge before version updates; a security major
+at the bottom waits for a human and blocks the PRs above it until merged.
+
+The stack workflow never rewrites a Dependabot PR that someone else pushed to:
+it holds that PR out of the stack and comments why. To bring it back, merge it
+by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
+dispatch to see the plan and the held PRs before anything is pushed.
+
+Stacked npm PRs get their `yarn.lock` normalized by the stack workflow after
+each rebase, folded into the Dependabot commit, so CI's immutable install passes
+on every layer. A PR held for a lockfile conflict or an empty update carries a
+conflict comment; once the PRs below it merge, comment `@dependabot recreate` on
+it. Such a PR keeps its old base; if that base branch was force-pushed in the
+same run, its diff shows the old parent commits (the run summary warns) until
+the next run restacks it or Dependabot recreates it. Before the first live run
+after a change to the stack script, dispatch with `dry_run=true` and check the
+plan's `normalize yarn.lock (amend)` and `HOLD` lines.
+
+When re-enabling the stack workflow after it was disabled, run one manual
+dispatch with `dry_run=false` and confirm in the log that the native stack step
+(unstack / create / add, listed under "Native stack actions" in the summary)
+succeeded before relying on the event triggers. When the order changes, the
+workflow unstacks and relinks by itself; if linking still fails, the run exits 3
+with the bases already chained. Unstack the stack by hand
+(`gh stack unstack <stack-number>`) and dispatch again.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
