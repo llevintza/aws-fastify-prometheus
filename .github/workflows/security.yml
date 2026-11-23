@@ -56,7 +56,7 @@ jobs:
           exit 0
 
       - name: Check for secrets in code
-        uses: trufflesecurity/trufflehog@v3.99.9
+        uses: trufflesecurity/trufflehog@v3.100.0
         with:
           path: ./
           version: 3.99.9
