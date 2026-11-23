@@ -18,7 +18,8 @@
 #      above the bottom. After each npm rebase, `yarn install
 #      --mode=update-lockfile` rewrites yarn.lock and, if it changed, the
 #      Dependabot commit is amended (author and full message, including the
-#      updated-dependencies metadata, kept; committer github-actions[bot],
+#      updated-dependencies metadata, kept byte for byte via
+#      --cleanup=verbatim; committer github-actions[bot],
 #      which the foreign-commit gate allows). A conflict only in yarn.lock
 #      takes the lower branch's yarn.lock and lets Yarn re-resolve. If that
 #      or the normalization fails, or the update ends up empty on the new
@@ -55,9 +56,10 @@
 #      stack") for a PR that is in a native stack. Before step 3a, the script
 #      unstacks (REST POST stacks/<n>/unstack) every open stack that holds a
 #      planned PR unless its open members are exactly the bottom of the
-#      planned chain (equal to it or a prefix of it). That covers a stacked PR
-#      whose base must change and a stack still holding a PR that left the
-#      chain (held, cut by a conflict). A matching stack is left alone, so an
+#      planned chain (equal to it or a prefix of it) AND none of them changes
+#      base. That covers a stacked PR whose base must change (even in a
+#      matching order, e.g. one still targeting a closed PR's branch) and a
+#      stack still holding a PR that left the chain (held, cut by a conflict). A matching stack is left alone, so an
 #      up-to-date stack costs no unstack and no retarget (only pushes when
 #      the trunk moved). An unstack failure stops before any retarget or push.
 #      With several stacks to dissolve, one already unstacked before a later
@@ -586,9 +588,17 @@ resolve_lock_conflicts() {
     git add yarn.lock
     normalize_lockfile "$parent_ref" || return 1
     git add yarn.lock
-    if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 \
+    # Commit the resolved state ourselves with the stopped commit's author and
+    # message, byte for byte: `rebase --continue` would apply the default
+    # cleanup (append a newline, strip lines starting with #). Nothing to
+    # commit means the update vanished on the new parent.
+    if ! git commit -q -C "$(cat .git/rebase-merge/stopped-sha)" --cleanup=verbatim >/dev/null 2>&1; then
+      LOCK_ERR="the update is empty on the new parent after re-resolving yarn.lock"
+      return 1
+    fi
+    if ! git rebase --continue >/dev/null 2>&1 \
         && [[ -z "$(git diff --name-only --diff-filter=U)" ]]; then
-      LOCK_ERR="rebase could not continue after re-resolving yarn.lock (the update may be empty on the new parent)"
+      LOCK_ERR="rebase could not continue after re-resolving yarn.lock"
       return 1
     fi
   done
@@ -793,7 +803,9 @@ if [[ ${#ELIGIBLE[@]} -gt 0 ]]; then
       fi
       if [[ $LOCK_CHANGED -eq 1 ]]; then
         git add yarn.lock
-        git commit --quiet --amend --no-edit
+        # --cleanup=verbatim keeps the message byte-identical (Dependabot
+        # messages end without a newline; the default cleanup would add one).
+        git commit --quiet --amend --no-edit --cleanup=verbatim
         lock_note+="normalize yarn.lock (amend); "
       fi
       git reset -q --hard
@@ -849,8 +861,9 @@ if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
     exit 1
   fi
   # Keep a stack only when its open members are exactly the bottom of the
-  # planned chain (equal to it or a prefix of it): every member then already
-  # chains as planned and link_stack can keep or extend it. Unstack any other
+  # planned chain (equal to it or a prefix of it) and none of them changes
+  # base: every member then already chains as planned and link_stack can keep
+  # or extend it. Unstack any other
   # stack that holds a planned PR, because either one of its PRs must change
   # base (GitHub answers HTTP 422 for a stacked PR) or it holds a PR that is
   # no longer in the chain (held, cut by a conflict), which would make the
@@ -862,9 +875,6 @@ if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
       continue
     fi
     members="${STACK_MEMBERS[$snum]}"
-    if [[ "${PLAN_NUM[*]} " == "$members "* ]]; then
-      continue
-    fi
     why=""
     for m in $members; do
       if [[ " ${PLAN_NUM[*]} " != *" $m "* ]]; then
@@ -877,6 +887,11 @@ if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
         why+="#${PLAN_NUM[$j]} changes base; "
       fi
     done
+    # A member that changes base gets HTTP 422 even when the order matches
+    # (e.g. one still targeting the branch of a closed PR), so it never keeps.
+    if [[ -z "$why" && "${PLAN_NUM[*]} " == "$members "* ]]; then
+      continue
+    fi
     UNSTACK_WHY[$snum]="${why:-order differs from the chain; }"
   done
   echo ""
