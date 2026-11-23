@@ -89,6 +89,12 @@ it holds that PR out of the stack and comments why. To bring it back, merge it
 by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
 dispatch to see the plan and the held PRs before anything is pushed.
 
+Stacked npm PRs get their `yarn.lock` normalized by the stack workflow after
+each rebase, folded into the Dependabot commit, so CI's immutable install passes
+on every layer. A PR held for a lockfile conflict or an empty update carries a
+conflict comment; once the PRs below it merge, comment `@dependabot recreate` on
+it.
+
 When re-enabling the stack workflow after it was disabled, run one manual
 dispatch with `dry_run=false` and confirm in the log that the native stack step
 (unstack / create / add, listed under "Native stack actions" in the summary)

@@ -48,6 +48,16 @@ Security updates sort to the bottom: the security groups plus any single
 security PR (`security-update`: Dependabot's security-update footer in the body;
 GHSA IDs are not matched because version-update changelogs cite them too).
 
+Rebasing npm branches merges `yarn.lock` as text, which can leave a lockfile
+that `yarn install --immutable` rejects (YN0028). After each npm rebase the
+script runs `yarn install --mode=update-lockfile` (scripts off, empty
+environment, trunk's Yarn and `.yarnrc.yml` only) and amends the Dependabot
+commit when `yarn.lock` changed (author and metadata kept; committer
+`github-actions[bot]`, which the foreign-commit gate allows). A PR whose
+lockfile conflict or normalization fails, or whose update ends up empty, is held
+out with a conflict comment. The workflow sets up Node (`.nvmrc`) and Corepack
+without a dependency cache (`pull_request_target`).
+
 The stack workflow's concurrency group is on the job, not the workflow, so a
 skipped non-Dependabot `pull_request_target` run can no longer cancel a pending
 Dependabot run or dispatch; dry-run dispatches use a separate group.
