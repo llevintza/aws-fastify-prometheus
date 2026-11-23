@@ -183,7 +183,10 @@ detect_group() {
 list_dependabot_prs() {
   # Fields: number|headRefName|baseRefName|title|labels(csv)|url|security(0/1)
   # REST reports the Dependabot author as `dependabot[bot]`. security=1 when
-  # the body carries the footer Dependabot adds only to security-update PRs.
+  # the body carries the footer Dependabot adds only to security-update PRs
+  # ("You can disable automated security fix PRs for this repo ..."). If
+  # GitHub rewords that footer, single security PRs silently fall back to
+  # rank 999 (order only; nothing breaks): update the test below.
   # A GHSA match is NOT used: copied release notes and changelogs in version
   # updates often cite GHSA IDs.
   gh api --paginate "repos/${GH_REPO}/pulls?state=open&per_page=100" --jq '
