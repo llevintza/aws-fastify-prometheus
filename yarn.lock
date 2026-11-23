@@ -3751,12 +3751,12 @@ __metadata:
   linkType: hard
 
 "avvio@npm:^9.0.0":
-  version: 9.1.0
-  resolution: "avvio@npm:9.1.0"
+  version: 9.3.1
+  resolution: "avvio@npm:9.3.1"
   dependencies:
     "@fastify/error": "npm:^4.0.0"
     fastq: "npm:^1.17.1"
-  checksum: 10c0/bdc294a7e8f38e1e21f9d338d97d7240025db54f1005fc419cfe0499a35edf2276ab1fe91135739faa3a9437358ec6912d5a56f23361b061880333cb4f1c7884
+  checksum: 10c0/577fb5d9699456d84e74631470376beffd0518f773fa11f87d9e9d73f329f2f5e013419f5515196469325d258f17c4079b9329e153c6b3c827509afb31df5f99
   languageName: node
   linkType: hard
 
