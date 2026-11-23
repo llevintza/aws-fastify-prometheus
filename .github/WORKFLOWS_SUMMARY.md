@@ -30,9 +30,14 @@ Overview of CI/CD for this repo. Deep release/Dependabot rules:
 | Dependabot Auto-Merge | `dependabot-auto-merge.yml` | After CI success on a PR      | Auto-merge confident stack-bottom patches (\*)     |
 
 (\*) The update type is the highest `update-type` in the Dependabot commit
-message metadata (the PR body has none). The stack script matches the PR author
-as `app/dependabot`, `dependabot[bot]` or `dependabot`, since `gh pr list`
-reports the GraphQL form.
+message metadata (the PR body has none).
+
+The stack script uses only REST (`gh api`), so its PAT needs no `read:org`. It
+holds out of the stack, and never rebases or force-pushes, any PR with a commit
+not authored by `dependabot[bot]` (same gate as auto-merge). It retargets each
+base before pushing and rolls the base back if the push fails. The two copies of
+that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
+(**Dependabot Docs Sync** job) fails if they differ.
 
 Dependabot scope: version updates cover **direct** dependencies only
 (transitives move with their direct parent). Dependabot alerts and security
@@ -107,7 +112,7 @@ From `jest.config.js`: branches 40 / functions 24 / lines 45 / statements 45.
 | -------------------------------------- | -------------------------------------------- |
 | `XOON_NPM_PUBLISH_TOKEN`               | semantic-release / GitHub Packages publish   |
 | `CODE_QUALITY_REPORT_TOKEN`            | Upsert short CI/Security PR pointer comments |
-| `GH_TOKEN` (or publish token fallback) | Dependabot stack push/retarget               |
+| `GH_TOKEN` (or publish token fallback) | Dependabot stack push/retarget (`repo` only) |
 
 Prefer classic PATs with least privilege. Do not use fine-grained PATs for
 Packages publish.

@@ -5,9 +5,10 @@
 # Dependabot PR is closed (including merge → restack remaining), or manually.
 #
 # Required secret: GH_TOKEN
-#   Classic PAT (never fine-grained, never GITHUB_TOKEN — see AGENTS.md) with:
-#     - contents: write (clone + force-push dependabot/* branches with lease)
-#     - pull requests: write (edit base, labels, comments)
+#   Classic PAT (never fine-grained, never GITHUB_TOKEN — see AGENTS.md) with
+#   the `repo` scope (`public_repo` is enough for a public repo) that can
+#   force-push dependabot/* branches. No `read:org`: the script uses REST
+#   (`gh api`) for bases, labels and comments, never `gh pr edit`.
 #   Plain GITHUB_TOKEN cannot push to dependabot/* branches in most repos.
 # Fallback (if GH_TOKEN is unset in this environment): XOON_NPM_PUBLISH_TOKEN
 #   when that token also has the scopes above — prefer a dedicated GH_TOKEN.
@@ -15,6 +16,11 @@
 # Does not rewrite Dependabot commit messages/contents; only rebases,
 # retargets PR bases, and links the chain into a native GitHub stack
 # (`gh stack link`). Chained bases alone do not form a stack.
+# Safety rules (hold check, retarget-before-push ordering, rollback) are in
+# the header of .github/scripts/stack-dependabot-prs.sh. PRs with commits not
+# authored by dependabot[bot] are held out of the stack and never rewritten.
+# dry_run clones and plans the rebases, prints every decision (including the
+# held PRs), and mutates nothing on GitHub.
 
 name: Dependabot Stack
 
@@ -24,13 +30,13 @@ on:
   workflow_dispatch:
     inputs:
       dry_run:
-        description: "Print planned stack actions without mutating"
+        description: 'Print planned stack actions without mutating'
         required: false
-        default: "false"
+        default: 'false'
         type: choice
         options:
-          - "false"
-          - "true"
+          - 'false'
+          - 'true'
 
 concurrency:
   group: dependabot-stack-${{ github.repository }}
@@ -45,9 +51,8 @@ jobs:
     name: Stack Dependabot PRs
     runs-on: ubuntu-latest
     # Dependabot author on PR events; always run for manual dispatch.
-    # The webhook payload uses the REST login `dependabot[bot]`; only
-    # `gh pr list --json author` (GraphQL) reports `app/dependabot`, which the
-    # stack script handles.
+    # The webhook payload and the REST API the stack script lists PRs with
+    # both use the login `dependabot[bot]`.
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.user.login == 'dependabot[bot]')

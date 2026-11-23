@@ -324,6 +324,24 @@ jobs:
       - uses: actions/checkout@v7
         with:
           fetch-depth: 0
+      - name: Foreign-commit gate copies match
+        # The stack script and auto-merge each hold PRs with non-Dependabot
+        # commits using the same jq rule. Fail if the two copies drift.
+        run: |
+          set -euo pipefail
+          extract() {
+            awk '/# foreign-commit-gate:end/ { f = 0 } f { print } /# foreign-commit-gate:begin/ { f = 1 }' "$1" \
+              | sed 's/^[[:space:]]*//'
+          }
+          a=$(extract .github/workflows/dependabot-auto-merge.yml)
+          b=$(extract .github/scripts/stack-dependabot-prs.sh)
+          if [[ -z "$a" || "$a" != "$b" ]]; then
+            echo "::error::foreign-commit gate differs between dependabot-auto-merge.yml and stack-dependabot-prs.sh (or markers are missing)"
+            diff <(printf '%s\n' "$a") <(printf '%s\n' "$b") || true
+            exit 1
+          fi
+          echo "Foreign-commit gate copies match:"
+          printf '%s\n' "$a"
       - name: Require hub update when Dependabot automation changes
         run: |
           set -euo pipefail

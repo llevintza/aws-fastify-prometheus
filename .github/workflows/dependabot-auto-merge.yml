@@ -5,7 +5,7 @@ name: Dependabot Auto-Merge
 # which GitHub is browning out / blocking on public repos.
 on:
   workflow_run:
-    workflows: ["CI/CD"]
+    workflows: ['CI/CD']
     types: [completed]
 
 permissions:
@@ -94,9 +94,11 @@ jobs:
           # "Update branch" merge commit also counts as foreign and blocks.
           foreign_commits=$(printf '%s\n' "$commits_json" | jq -r '
             [.[] | select(
+              # foreign-commit-gate:begin (CI fails if this differs from the other copy)
               ((.author.login // "") != "dependabot[bot]")
               or ((.committer.login // "")
                   | IN("web-flow", "github-actions[bot]", "dependabot[bot]") | not)
+              # foreign-commit-gate:end
             )] | length')
           if [ "$foreign_commits" != "0" ]; then
             echo "PR #$pr_number has $foreign_commits non-Dependabot commit(s); skipping auto-merge."
