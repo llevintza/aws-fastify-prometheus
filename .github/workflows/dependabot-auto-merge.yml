@@ -107,7 +107,7 @@ jobs:
             | sed -nE 's/^[[:space:]]*update-type:[[:space:]]*(version-update:semver-(major|minor|patch))[[:space:]]*$/\1/p')
           update_type="unknown"
           for level in major minor patch; do
-            if echo "$update_types" | grep -qx "version-update:semver-${level}"; then
+            if grep -qx "version-update:semver-${level}" <<<"$update_types"; then
               update_type="version-update:semver-${level}"
               break
             fi
@@ -118,14 +118,14 @@ jobs:
 
           # High-risk / held rows: comment for manual review, do not auto-merge.
           needs_manual=0
-          if echo "$signals" | grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client'; then
+          if grep -Eiq 'security-critical|fastify-ecosystem-major|aws-ecosystem|@prometheus-io/client' <<<"$signals"; then
             needs_manual=1
           fi
-          if echo "$signals" | grep -Eiq 'prom-client' && \
-             { [ "$update_type" = "version-update:semver-major" ] || echo "$signals" | grep -Eiq 'major|breaking'; }; then
+          if grep -Eiq 'prom-client' <<<"$signals" && \
+             { [ "$update_type" = "version-update:semver-major" ] || grep -Eiq 'major|breaking' <<<"$signals"; }; then
             needs_manual=1
           fi
-          if echo "$signals" | grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement'; then
+          if grep -Eiq 'engines?\.node|peerDependenc|peer.?contract|requires? fastify|engine.?requirement' <<<"$signals"; then
             needs_manual=1
           fi
           if [ "$update_type" = "version-update:semver-major" ]; then
@@ -162,12 +162,12 @@ jobs:
           fi
 
           # Extra denylist for production / ecosystem names even on patch metadata.
-          if echo "$signals" | grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem'; then
+          if grep -Eiq '@aws-sdk/|aws-sdk|@prometheus-io/client|security-critical|fastify-ecosystem' <<<"$signals"; then
             echo "Denylisted dependency signals present; skipping auto-merge."
             exit 0
           fi
-          if echo "$signals" | grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' && \
-             ! echo "$signals" | grep -Eiq 'fastify-plugin'; then
+          if grep -Eiq '(^|[^/-])fastify([^/-]|$)|@fastify/' <<<"$signals" && \
+             ! grep -Eiq 'fastify-plugin' <<<"$signals"; then
             echo "Denylisted fastify host signals present; skipping auto-merge."
             exit 0
           fi
