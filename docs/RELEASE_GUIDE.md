@@ -93,7 +93,11 @@ Stacked npm PRs get their `yarn.lock` normalized by the stack workflow after
 each rebase, folded into the Dependabot commit, so CI's immutable install passes
 on every layer. A PR held for a lockfile conflict or an empty update carries a
 conflict comment; once the PRs below it merge, comment `@dependabot recreate` on
-it.
+it. Such a PR keeps its old base; if that base branch was force-pushed in the
+same run, its diff shows the old parent commits (the run summary warns) until
+the next run restacks it or Dependabot recreates it. Before the first live run
+after a change to the stack script, dispatch with `dry_run=true` and check the
+plan's `normalize yarn.lock (amend)` and `HOLD` lines.
 
 When re-enabling the stack workflow after it was disabled, run one manual
 dispatch with `dry_run=false` and confirm in the log that the native stack step

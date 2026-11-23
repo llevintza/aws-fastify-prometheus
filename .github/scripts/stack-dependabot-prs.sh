@@ -28,7 +28,8 @@
 #      Safety (pull_request_target, untrusted PR content): Yarn runs only on
 #      Dependabot-authored branches that passed step 1, only when the PR
 #      changes nothing but package.json / yarn.lock (so .yarnrc.yml, .yarn/
-#      and plugins are the trunk's) and its packageManager equals the trunk's,
+#      and plugins are the trunk's), adds no non-registry descriptor (git,
+#      patch, portal, link, exec, file, URL) and its packageManager equals the trunk's,
 #      with lifecycle scripts disabled, in update-lockfile mode (no link or
 #      build step), and with an empty environment (env -i: no GH_TOKEN). The
 #      token is never written to the clone: git gets it per command through
@@ -519,6 +520,13 @@ normalize_lockfile() {
     LOCK_ERR="the PR changes files other than package.json / yarn.lock; Yarn was not run"
     return 1
   fi
+  # Registry versions only: git, patch, portal, link, exec and file
+  # descriptors can make Yarn pack, prepare or run code even with scripts off.
+  if git diff "$parent_ref" -- package.json | grep '^+' \
+      | grep -qE '"(git[+:]|github:|gitlab:|bitbucket:|patch:|portal:|link:|exec:|file:|https?://)'; then
+    LOCK_ERR="package.json adds a non-registry dependency descriptor; Yarn was not run"
+    return 1
+  fi
   pm_tree=$(jq -r '.packageManager // ""' package.json)
   pm_base=$(git show "origin/${BASE_BRANCH}:package.json" | jq -r '.packageManager // ""')
   if [[ "$pm_tree" != "$pm_base" ]]; then
@@ -549,7 +557,10 @@ resolve_lock_conflicts() {
       LOCK_ERR="conflict outside yarn.lock: $(git diff --name-only --diff-filter=U | tr '\n' ' ')"
       return 1
     fi
+    # Stage the lower branch's yarn.lock first, so the index is merged before
+    # Yarn runs (LOCK_CHANGED is not used on this path).
     git checkout --ours -- yarn.lock
+    git add yarn.lock
     normalize_lockfile "$parent_ref" || return 1
     git add yarn.lock
     if ! GIT_EDITOR=true git rebase --continue >/dev/null 2>&1 \
