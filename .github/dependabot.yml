@@ -156,7 +156,7 @@ updates:
         update-types:
           - "major"
 
-      # Catch-all for remaining packages (reduces ungrouped transitive PR fan-out)
+      # Catch-all for remaining direct packages
       other-dependencies:
         patterns:
           - "*"
