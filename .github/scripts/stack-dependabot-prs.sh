@@ -35,6 +35,8 @@
 #      chain (held, cut by a conflict). A matching stack is left alone, so an
 #      up-to-date stack costs no unstack and no retarget (only pushes when
 #      the trunk moved). An unstack failure stops before any retarget or push.
+#      With several stacks to dissolve, one already unstacked before a later
+#      unstack fails stays unstacked (PRs unchanged) until the next run relinks.
 #   4. Relink the chain as a native GitHub stack (REST Stacks API): no-op
 #      when the existing stack already equals the chain, `add` the missing
 #      top PRs when it is a prefix of the chain, otherwise create a new
