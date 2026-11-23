@@ -14,8 +14,20 @@
 #   when that token also has the scopes above — prefer a dedicated GH_TOKEN.
 #
 # Does not rewrite Dependabot commit messages/contents; only rebases,
-# retargets PR bases, and links the chain into a native GitHub stack
-# (`gh stack link`). Chained bases alone do not form a stack.
+# retargets PR bases, and links the chain into a native GitHub stack through
+# the Stacks REST API (unstack first when a stacked PR must change base, which
+# GitHub otherwise rejects with HTTP 422). Chained bases alone do not form a
+# stack. No gh extension is needed.
+#
+# Concurrency is set on the JOB, not the workflow. pull_request_target fires
+# for every PR, and the job `if` skips non-Dependabot PRs. With a
+# workflow-level group, that skipped run still entered the group and replaced
+# (cancelled) a pending Dependabot run or manual dispatch. A skipped job never
+# enters a job-level group. Inside the group GitHub keeps one running and one
+# pending run, so a newer pending run can still replace an older one; that is
+# safe because every run re-reads all open PRs and stacks from scratch.
+# Dry-run dispatches use their own group: they mutate nothing, so they never
+# queue behind, or replace, a live restack.
 # Safety rules (hold check, retarget-before-push ordering, rollback) are in
 # the header of .github/scripts/stack-dependabot-prs.sh. PRs with commits not
 # authored by dependabot[bot] are held out of the stack and never rewritten.
@@ -38,10 +50,6 @@ on:
           - 'false'
           - 'true'
 
-concurrency:
-  group: dependabot-stack-${{ github.repository }}
-  cancel-in-progress: false
-
 permissions:
   contents: read
   pull-requests: write
@@ -56,6 +64,12 @@ jobs:
     if: |
       github.event_name == 'workflow_dispatch' ||
       (github.event.pull_request.user.login == 'dependabot[bot]')
+    concurrency:
+      group: >-
+        dependabot-stack-${{ github.repository }}-${{
+        github.event_name == 'workflow_dispatch' && github.event.inputs.dry_run == 'true'
+        && 'dry-run' || 'live' }}
+      cancel-in-progress: false
 
     steps:
       - name: Checkout workflow scripts
@@ -64,12 +78,6 @@ jobs:
           # pull_request_target checks out the base ref by default (trusted).
           # Script lives on the default branch / this workflow's ref.
           path: .stack-src
-
-      - name: Install gh-stack extension
-        env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN || secrets.XOON_NPM_PUBLISH_TOKEN }}
-        # Pinned: `gh stack link` turns the chained PRs into a native GitHub stack.
-        run: gh extension install github/gh-stack --pin v0.1.0
 
       - name: Stack / restack Dependabot PRs
         env:
