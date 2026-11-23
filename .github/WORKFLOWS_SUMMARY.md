@@ -39,6 +39,18 @@ base before pushing and rolls the base back if the push fails. The two copies of
 that author/committer jq rule sit between `foreign-commit-gate` markers, and CI
 (**Dependabot Docs Sync** job) fails if they differ.
 
+Native stacks go through the Stacks REST API (no gh extension). GitHub refuses a
+base change for a PR inside a native stack (HTTP 422), so the script unstacks
+only a stack holding a PR whose base must change, then retargets, pushes and
+relinks (create, or `add` when the old stack is a prefix). A stack that already
+matches the plan is left alone. Security updates sort to the bottom: the
+security groups plus any single security PR (`security-update`: GHSA reference
+or Dependabot's security-update footer).
+
+The stack workflow's concurrency group is on the job, not the workflow, so a
+skipped non-Dependabot `pull_request_target` run can no longer cancel a pending
+Dependabot run or dispatch; dry-run dispatches use a separate group.
+
 Dependabot scope: version updates cover **direct** dependencies only
 (transitives move with their direct parent). Dependabot alerts and security
 updates are enabled; security PRs land in `security-patch-minor` /

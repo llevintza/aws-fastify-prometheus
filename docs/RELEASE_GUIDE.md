@@ -80,6 +80,9 @@ counts, too); everything else waits for a human. Auto-merge is bound to the head
 SHA whose CI passed. Security-update groups are split by update type
 (patch+minor vs major), so a security major is held for review without holding
 security patches; patch-only security PRs at the stack bottom can auto-merge.
+All security updates (grouped, and single PRs that reference a GHSA advisory)
+sit at the bottom of the stack, so they merge before version updates; a security
+major at the bottom waits for a human and blocks the PRs above it until merged.
 
 The stack workflow never rewrites a Dependabot PR that someone else pushed to:
 it holds that PR out of the stack and comments why. To bring it back, merge it
@@ -87,12 +90,12 @@ by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
 dispatch to see the plan and the held PRs before anything is pushed.
 
 When re-enabling the stack workflow after it was disabled, run one manual
-dispatch with `dry_run=false` and confirm in the log that the `gh stack link`
-step succeeded before relying on the event triggers. If linking fails, the run
-exits 3 with the bases already chained. A PR that is now held (for example one a
-person pushed to) can still sit in a native stack an earlier run linked; if
-`gh stack link` fails for that reason, run `gh stack unstack <stack-number>` and
-dispatch again.
+dispatch with `dry_run=false` and confirm in the log that the native stack step
+(unstack / create / add, listed under "Native stack actions" in the summary)
+succeeded before relying on the event triggers. When the order changes, the
+workflow unstacks and relinks by itself; if linking still fails, the run exits 3
+with the bases already chained. Unstack the stack by hand
+(`gh stack unstack <stack-number>`) and dispatch again.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
