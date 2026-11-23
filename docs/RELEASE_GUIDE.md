@@ -76,8 +76,13 @@ workflow). Do not rebase upper Dependabot branches by hand unless the workflow
 reports a conflict. Auto-merge only takes the stack bottom, and only when every
 row in the `updated-dependencies` commit metadata is a patch (highest type wins)
 and no one else pushed to the branch (a GitHub **Update branch** merge commit
-counts, too); everything else waits for a human. Auto-merge is bound to the
-head SHA whose CI passed.
+counts, too); everything else waits for a human. Auto-merge is bound to the head
+SHA whose CI passed.
+
+The stack workflow never rewrites a Dependabot PR that someone else pushed to:
+it holds that PR out of the stack and comments why. To bring it back, merge it
+by hand or close it so Dependabot recreates it. Use `dry_run` on a manual
+dispatch to see the plan and the held PRs before anything is pushed.
 
 Behavior details live in the automation files (workflows, stack script,
 `dependabot.yml`, contract analyzer). When those change, update this guide
