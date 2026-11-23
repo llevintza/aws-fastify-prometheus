@@ -26,17 +26,32 @@
 #      push, and a failed push rolls the base back, so every PR is either
 #      fully restacked or untouched. PRs below the failure stay consistent
 #      (each was fully applied); PRs above it are not touched.
-#   4. Register the chain as a native GitHub stack with `gh stack link`.
+#      Native stacks: GitHub rejects a base change (HTTP 422 "part of a
+#      stack") for a PR that is in a native stack. Before step 3a, the script
+#      unstacks (REST POST stacks/<n>/unstack) every open stack that holds a
+#      PR whose base must change. A stack whose PRs already chain as planned
+#      is left alone, so an up-to-date stack costs no unstack and no
+#      retarget (only pushes when the trunk moved). An unstack failure stops
+#      before any retarget or push.
+#   4. Relink the chain as a native GitHub stack (REST Stacks API): no-op
+#      when the existing stack already equals the chain, `add` the missing
+#      top PRs when it is a prefix of the chain, otherwise create a new
+#      stack. If step 3 failed part-way, the applied prefix (each PR fully
+#      restacked) is relinked before exiting, so it is not left unstacked.
 #      Chained bases alone are NOT a stack in the GitHub UI. The `stacked`
 #      label is only added once this step succeeds.
 #
+# Merge order: GROUP_ORDER, bottom first. Security updates sit at the very
+# bottom so they merge first: the security groups, then any single security
+# PR (`security-update`: no known group, and its body or commits reference a
+# GHSA advisory or carry Dependabot's security-update footer). Majors still
+# wait for a human (auto-merge only takes patch updates).
+#
 # GitHub API: every call is REST (`gh api`), so a classic PAT with only the
 # `repo` / `public_repo` scope works. `gh pr edit` is NOT used: it queries
-# org team fields over GraphQL and fails without `read:org`. `gh stack link`
-# (gh-stack v0.1.0) reads PR fields over GraphQL that need no `read:org`
-# and uses REST for the stack and base endpoints.
-#
-# Requires the gh-stack extension (`gh extension install github/gh-stack`).
+# org team fields over GraphQL and fails without `read:org`. The gh-stack
+# extension is not needed: the script calls the Stacks REST API itself
+# (list, unstack, create, add).
 #
 # Required env:
 #   GH_TOKEN  — classic PAT (repo / public_repo scope) that can push to
@@ -55,7 +70,8 @@
 #       failing PR was left or rolled back to its previous state
 #   2 — rebase conflict; conflicting PR commented, chain cut there
 #       (PRs below the conflict are still stacked and linked)
-#   3 — `gh stack link` failed; bases are chained but no native stack exists
+#   3 — native stack create/add failed; bases are chained but the PRs are
+#       not (all) in a native stack
 
 set -euo pipefail
 
@@ -81,13 +97,18 @@ fi
 export GH_TOKEN GH_REPO
 
 # Fixed merge order: bottom (index 0) → top. Unknown groups sort after these by PR number.
-# Security patch/minor groups sit at the bottom so fixes merge first (only the
-# stack bottom may auto-merge); security majors sit near the top for review.
+# Every security update sits at the bottom so fixes merge first: the grouped
+# security PRs, then single security PRs (`security-update`, set in main, not
+# a dependabot.yml group). Security majors are at the bottom too, so they are
+# reviewed first; auto-merge still holds them for a human.
 # detect_group prefers the longest match, so `actions-security-*` beats the
 # npm `security-*` names it contains.
 GROUP_ORDER=(
   security-patch-minor
   actions-security-patch-minor
+  security-update
+  security-major
+  actions-security-major
   github-actions-official
   security-actions
   dependency-actions
@@ -100,10 +121,7 @@ GROUP_ORDER=(
   aws-ecosystem
   fastify-ecosystem
   other-dependencies
-  transitive-misc
   security-critical
-  actions-security-major
-  security-major
   fastify-ecosystem-major
 )
 
@@ -116,17 +134,6 @@ group_rank() {
       return 0
     fi
   done
-  # Catch-all aliases for leftover npm groups
-  case "$group" in
-    other-dependencies|transitive-misc|transitive-catch-all|other-deps)
-      for i in "${!GROUP_ORDER[@]}"; do
-        if [[ "${GROUP_ORDER[$i]}" == "other-dependencies" ]]; then
-          echo "$i"
-          return 0
-        fi
-      done
-      ;;
-  esac
   echo "999"
 }
 
@@ -170,8 +177,10 @@ detect_group() {
 }
 
 list_dependabot_prs() {
-  # Fields: number|headRefName|baseRefName|title|labels(csv)|url
-  # REST reports the Dependabot author as `dependabot[bot]`.
+  # Fields: number|headRefName|baseRefName|title|labels(csv)|url|security(0/1)
+  # REST reports the Dependabot author as `dependabot[bot]`. security=1 when
+  # the body names a GHSA advisory or carries the footer Dependabot adds only
+  # to security-update PRs.
   gh api --paginate "repos/${GH_REPO}/pulls?state=open&per_page=100" --jq '
     .[]
     | select(.user.login == "dependabot[bot]")
@@ -181,10 +190,85 @@ list_dependabot_prs() {
         .base.ref,
         (.title | gsub("\\|"; "/")),
         ([.labels[].name] | join(",")),
-        .html_url
+        .html_url,
+        (if ((.body // "") | test("GHSA-[0-9a-z]{4}-|automated security fix PRs"; "i"))
+         then "1" else "0" end)
       ]
     | join("|")
   '
+}
+
+# True when a commit message on the PR names a GHSA advisory.
+commits_reference_ghsa() {
+  local pr_number="$1"
+  [[ "$(gh api "repos/${GH_REPO}/pulls/${pr_number}/commits?per_page=100" \
+    --jq '[.[].commit.message] | join("\n") | test("GHSA-[0-9a-z]{4}-"; "i")' 2>/dev/null)" == "true" ]]
+}
+
+# --- native stacks (REST Stacks API) ---
+# PR_STACK[pr]=stack number, STACK_MEMBERS[stack]="open PRs bottom → top".
+declare -A PR_STACK=()
+declare -A STACK_MEMBERS=()
+
+load_stacks() {
+  local out line snum members p
+  PR_STACK=()
+  STACK_MEMBERS=()
+  if ! out=$(gh api --paginate "repos/${GH_REPO}/stacks?per_page=100" --jq '
+      .[] | select(.open)
+      | "\(.number)|\([.pull_requests[] | select(.state == "open" and .merged_at == null)
+                       | .number | tostring] | join(" "))"'); then
+    return 1
+  fi
+  while IFS='|' read -r snum members; do
+    [[ -z "$snum" || -z "$members" ]] && continue
+    STACK_MEMBERS[$snum]="$members"
+    for p in $members; do
+      PR_STACK[$p]="$snum"
+    done
+  done <<<"$out"
+}
+
+# Make STACK_PRS one native stack: no-op if it already is, extend a stack
+# that holds a prefix of it, else create one. Returns 1 on failure.
+link_stack() {
+  local -a want=("$@")
+  local bottom="${want[0]}" snum existing payload
+  local -a have delta
+  snum="${PR_STACK[$bottom]:-}"
+  if [[ -n "$snum" ]]; then
+    existing="${STACK_MEMBERS[$snum]}"
+    read -r -a have <<<"$existing"
+    if [[ "$existing" == "${want[*]}" ]]; then
+      echo "Native stack #$snum already matches (${#want[@]} PRs); no change."
+      STACK_ACTIONS+=("kept native stack #$snum as is")
+      return 0
+    fi
+    if [[ "${want[*]}" == "$existing "* ]]; then
+      delta=("${want[@]:${#have[@]}}")
+      payload=$(printf '{"pull_requests":[%s]}' "$(IFS=,; echo "${delta[*]}")")
+      if [[ "$DRY_RUN" == "true" ]]; then
+        echo "[dry-run] would add ${delta[*]} to native stack #$snum (REST POST stacks/$snum/add)"
+      elif ! gh api -X POST "repos/${GH_REPO}/stacks/${snum}/add" --input - <<<"$payload" >/dev/null; then
+        echo "ERROR: adding ${delta[*]} to native stack #$snum failed." >&2
+        return 1
+      fi
+      STACK_ACTIONS+=("add ${delta[*]} to native stack #$snum")
+      return 0
+    fi
+    echo "ERROR: #$bottom is in native stack #$snum (${existing}), which does not match the chain." >&2
+    return 1
+  fi
+  payload=$(printf '{"pull_requests":[%s]}' "$(IFS=,; echo "${want[*]}")")
+  if [[ "$DRY_RUN" == "true" ]]; then
+    echo "[dry-run] would create a native stack: ${want[*]} (REST POST stacks)"
+  elif ! snum=$(gh api -X POST "repos/${GH_REPO}/stacks" --input - --jq .number <<<"$payload"); then
+    echo "ERROR: creating the native stack ${want[*]} failed." >&2
+    return 1
+  else
+    echo "Created native stack #$snum."
+  fi
+  STACK_ACTIONS+=("create native stack: ${want[*]}")
 }
 
 # Print why a PR must be held out of the stack, or nothing when every commit
@@ -393,9 +477,14 @@ fi
 # Build sortable records: rank-pr|pr|head|base|title|labels|url|group
 RECORDS=()
 for line in "${PR_LINES[@]}"; do
-  IFS='|' read -r num head base title labels url <<<"$line"
+  IFS='|' read -r num head base title labels url security <<<"$line"
   group=$(detect_group "$head" "$title" "$labels")
   rank=$(group_rank "$group")
+  # A single (ungrouped) security PR goes to the bottom with the groups.
+  if [[ "$rank" == "999" ]] && { [[ "$security" == "1" ]] || commits_reference_ghsa "$num"; }; then
+    group="security-update"
+    rank=$(group_rank "$group")
+  fi
   # Pad rank and PR number for lexical sort; unknown groups (999) then by PR asc.
   # The key must be ONE '|'-field: readers split records with IFS='|'.
   printf -v key "%03d-%06d" "$rank" "$num"
@@ -432,11 +521,6 @@ for rec in "${ELIGIBLE[@]}"; do
 done
 if [[ ${#ELIGIBLE[@]} -eq 0 ]]; then
   echo "  (none)"
-fi
-
-if [[ "$DRY_RUN" != "true" ]] && ! gh stack --help >/dev/null 2>&1; then
-  echo "ERROR: gh-stack extension not installed (gh extension install github/gh-stack)." >&2
-  exit 1
 fi
 
 # --- 2. plan (local only) ---
@@ -524,9 +608,52 @@ fi
 STACK_PRS=()
 CHAIN_LINES=()
 PUSHED_BRANCHES=()
+STACK_ACTIONS=()
 APPLY_FAILED=0
 
+if [[ ${#PLAN_NUM[@]} -gt 0 ]]; then
+  if ! load_stacks; then
+    echo "ERROR: could not list native stacks (REST GET stacks); nothing was mutated." >&2
+    exit 1
+  fi
+  # A PR in a native stack cannot change base (HTTP 422), so unstack every
+  # stack holding a PR whose base must change. Stacks that already chain as
+  # planned are kept.
+  declare -A UNSTACK_WHY=()
+  for idx in "${!PLAN_NUM[@]}"; do
+    num="${PLAN_NUM[$idx]}"
+    snum="${PR_STACK[$num]:-}"
+    if [[ -n "$snum" && "${PLAN_OLD_BASE[$idx]}" != "${PLAN_NEW_BASE[$idx]}" ]]; then
+      UNSTACK_WHY[$snum]+="#$num "
+    fi
+  done
+  echo ""
+  if [[ ${#UNSTACK_WHY[@]} -eq 0 ]]; then
+    echo "Native stacks: no unstack needed (no stacked PR changes base)."
+  fi
+  for snum in "${!UNSTACK_WHY[@]}"; do
+    why="${UNSTACK_WHY[$snum]% }"
+    if [[ "$DRY_RUN" == "true" ]]; then
+      echo "[dry-run] would unstack native stack #$snum (${STACK_MEMBERS[$snum]}); base changes needed for ${why}"
+    elif gh api -X POST "repos/${GH_REPO}/stacks/${snum}/unstack" >/dev/null; then
+      echo "Unstacked native stack #$snum (${STACK_MEMBERS[$snum]}); base changes needed for ${why}"
+    else
+      echo "ERROR: unstack of native stack #$snum failed; nothing was retargeted or pushed." >&2
+      APPLY_FAILED=1
+      break
+    fi
+    STACK_ACTIONS+=("unstack native stack #$snum (base changes for ${why})")
+    for p in ${STACK_MEMBERS[$snum]}; do
+      unset "PR_STACK[$p]"
+    done
+    unset "STACK_MEMBERS[$snum]"
+  done
+fi
+
 for idx in "${!PLAN_NUM[@]}"; do
+  if [[ $APPLY_FAILED -eq 1 ]]; then
+    break
+  fi
   num="${PLAN_NUM[$idx]}"
   head="${PLAN_HEAD[$idx]}"
   old_base="${PLAN_OLD_BASE[$idx]}"
@@ -602,6 +729,10 @@ print_summary() {
   if [[ ${#CHAIN_LINES[@]} -gt 0 ]]; then
     printf '  %s\n' "${CHAIN_LINES[@]}"
   fi
+  echo "Native stack actions: ${#STACK_ACTIONS[@]}"
+  if [[ ${#STACK_ACTIONS[@]} -gt 0 ]]; then
+    printf '  %s\n' "${STACK_ACTIONS[@]}"
+  fi
   echo "Held out (non-Dependabot commits; not rebased, pushed or retargeted): ${#HELD_LINES[@]}"
   if [[ ${#HELD_LINES[@]} -gt 0 ]]; then
     printf '  SKIP %s\n' "${HELD_LINES[@]}"
@@ -630,23 +761,37 @@ print_summary() {
 }
 
 if [[ $APPLY_FAILED -eq 1 ]]; then
+  # Keep the fully applied prefix a native stack, so a part-way failure does
+  # not leave restacked PRs unlinked after an unstack.
+  if [[ ${#STACK_PRS[@]} -ge 2 ]]; then
+    echo ""
+    echo "Relinking the applied prefix: ${STACK_PRS[*]}"
+    if [[ "$DRY_RUN" != "true" ]] && ! load_stacks; then
+      echo "ERROR: could not re-list native stacks; the applied prefix is not relinked." >&2
+    else
+      link_stack "${STACK_PRS[@]}" || echo "ERROR: relinking the applied prefix failed." >&2
+    fi
+  fi
   print_summary
   exit 1
 fi
 
 # --- 4. native stack, labels, order comments ---
 
-# Register the chain as a native GitHub stack (bottom → top). Linking is
-# idempotent: an up-to-date stack is a no-op and an existing stack is extended.
+# Register the chain as a native GitHub stack (bottom → top). Idempotent: an
+# up-to-date stack is a no-op and a stack holding a prefix is extended.
 # A stack needs at least two PRs; a lone PR just stays based on the trunk.
 if [[ ${#STACK_PRS[@]} -ge 2 ]]; then
   echo ""
   echo "Linking native GitHub stack: ${STACK_PRS[*]}"
-  if [[ "$DRY_RUN" == "true" ]]; then
-    echo "[dry-run] would run: gh stack link --base $BASE_BRANCH ${STACK_PRS[*]}"
-  elif ! gh stack link --base "$BASE_BRANCH" "${STACK_PRS[@]}" </dev/null; then
-    echo "ERROR: gh stack link failed. Bases are chained, but the PRs are NOT a native stack." >&2
-    echo "If the order changed against an existing stack, unstack it (gh stack unstack <stack-number>) and re-run this workflow." >&2
+  if [[ "$DRY_RUN" != "true" ]] && ! load_stacks; then
+    echo "ERROR: could not re-list native stacks before linking." >&2
+    print_summary
+    exit 3
+  fi
+  if ! link_stack "${STACK_PRS[@]}"; then
+    echo "ERROR: bases are chained, but the PRs are NOT (all) in one native stack." >&2
+    echo "Unstack the conflicting stack (REST POST stacks/<n>/unstack or gh stack unstack <n>) and re-run this workflow." >&2
     print_summary
     exit 3
   fi
