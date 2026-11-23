@@ -199,6 +199,31 @@ updates:
           - "major"
           - "minor"
           - "patch"
+
+      # SECURITY updates. Groups without `applies-to` only cover version
+      # updates, so security PRs need their own groups (needs Dependabot
+      # alerts + security updates enabled in repo settings). Split by
+      # update-type because dependabot-auto-merge.yml scores a grouped PR by
+      # its HIGHEST row: one major in a catch-all would hold every patch.
+      # No production/development split: transitive rows report a plain
+      # `indirect` dependency-type, and the release analyzer already scores
+      # each row on its own. Names must not contain `security-critical` or
+      # `security-actions` (auto-merge denylist / stack-script substring
+      # matching); the stack script ranks these in GROUP_ORDER.
+      security-patch-minor:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      security-major:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
     
     # Security and stability rules
     # Note: Dependabot automatically excludes pre-release versions by default
@@ -214,10 +239,13 @@ updates:
     # Special handling for critical packages (let automation handle these carefully)
     # Major version updates for core framework will be grouped but reviewed carefully
     
-    # Always allow security updates
+    # Version updates for DIRECT dependencies only. `indirect` was removed: it
+    # made Dependabot open one ungrouped PR per transitive package (groups do
+    # not absorb standalone indirect bumps). Transitives still move in the
+    # lockfile when a direct dependency bumps. `allow` only filters VERSION
+    # updates; security updates for vulnerable transitives are unaffected.
     allow:
       - dependency-type: "direct"
-      - dependency-type: "indirect"
     
     # Better PR branch naming
     pull-request-branch-name:
@@ -274,3 +302,19 @@ updates:
           - "major"
           - "minor"
           - "patch"
+
+      # SECURITY updates for Actions (see the npm security groups above).
+      actions-security-patch-minor:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
+
+      actions-security-major:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - "major"
